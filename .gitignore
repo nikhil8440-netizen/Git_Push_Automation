@@ -11,3 +11,7 @@ backend/config.json
 backend/logs.json
 backend/*.corrupt
 shortcut/
+
+# Internal docs — not for the public GitHub repo
+CONTEXT.md
+USERMANUAL.md

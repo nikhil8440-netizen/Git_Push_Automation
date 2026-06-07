@@ -341,10 +341,40 @@ def run_backup(project_id, is_manual=False, commit_message=None):
     commit_sha = ""
     commit_msg = ""
     if auto_commit:
-        # Run git add in batches for filtered files
+        # 8a. Untrack files that are tracked but now match .gitignore. This makes
+        #     newly-ignored files (e.g. one you just added to .gitignore) get
+        #     removed from the repo on this backup, instead of lingering forever
+        #     or breaking 'git add'.
+        ls_ignored = subprocess.run(
+            ['git', 'ls-files', '-i', '-c', '--exclude-standard'],
+            cwd=path, capture_output=True, text=True, env=env
+        )
+        tracked_ignored = [f.strip() for f in ls_ignored.stdout.splitlines() if f.strip()]
+        for i in range(0, len(tracked_ignored), 100):
+            subprocess.run(['git', 'rm', '--cached', '--quiet', '--'] + tracked_ignored[i:i+100],
+                           cwd=path, capture_output=True, text=True, env=env)
+
+        # 8b. Remove any git-ignored paths from the staging list so 'git add' never
+        #     fails on them (their removal, if they were tracked, is handled in 8a).
+        #     NOTE: 'git check-ignore --stdin' can silently under-report, so paths
+        #     are passed as arguments (batched), which is reliable.
+        files_to_add = changed_files
+        if changed_files:
+            ignored_now = set()
+            for i in range(0, len(changed_files), 100):
+                batch = changed_files[i:i+100]
+                ci = subprocess.run(
+                    ['git', 'check-ignore'] + batch,
+                    cwd=path, capture_output=True, text=True, env=env
+                )
+                ignored_now.update(f.strip() for f in ci.stdout.splitlines() if f.strip())
+            if ignored_now:
+                files_to_add = [f for f in changed_files if f not in ignored_now]
+
+        # 8c. Stage the remaining changes (additions, modifications, deletions).
         batch_size = 100
-        for i in range(0, len(changed_files), batch_size):
-            batch = changed_files[i:i+batch_size]
+        for i in range(0, len(files_to_add), batch_size):
+            batch = files_to_add[i:i+batch_size]
             add_res = subprocess.run(
                 ['git', 'add', '--'] + batch,
                 cwd=path, capture_output=True, text=True, env=env
@@ -354,6 +384,18 @@ def run_backup(project_id, is_manual=False, commit_message=None):
                 logger.log_event(name, "FAILED", msg, stdout=add_res.stdout, stderr=add_res.stderr)
                 config_manager.update_project(project_id, {"last_status": "FAILED", "last_run": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
                 return "FAILED", msg
+
+        # 8d. If nothing actually ended up staged (e.g. every change was an ignored
+        #     path), treat it as a no-op instead of letting 'git commit' fail.
+        if subprocess.run(['git', 'diff', '--cached', '--quiet'],
+                          cwd=path, capture_output=True, text=True, env=env).returncode == 0:
+            msg = "No changes to back up after applying ignore rules."
+            logger.log_event(name, "NO_CHANGES", msg)
+            config_manager.update_project(project_id, {
+                "last_status": "NO_CHANGES",
+                "last_run": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
+            return "NO_CHANGES", msg
                 
         # Commit. Use the user-supplied title if given, otherwise fall back to
         # the standard timestamped "Auto Backup" format.
