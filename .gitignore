@@ -12,6 +12,7 @@ backend/logs.json
 backend/*.corrupt
 shortcut/
 
-# Internal docs — not for the public GitHub repo
+# Internal docs / agent files — not for the public GitHub repo
+CLAUDE.md
 CONTEXT.md
 USERMANUAL.md
