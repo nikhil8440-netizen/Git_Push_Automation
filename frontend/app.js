@@ -225,12 +225,23 @@ function bindTableActions() {
             const tr = e.target.closest('tr');
             const id = tr.dataset.id;
 
-            // Ask for an optional commit title. Blank / Cancel => default
-            // "Auto Backup - <date time>" format on the backend.
-            const commitMsg = prompt(
+            // Ask for an optional commit title, then confirm it so you can
+            // verify the app captured the name before it commits.
+            let commitMsg = prompt(
                 "Commit message for this backup (optional).\nLeave blank to use the default: \"Auto Backup - <date time>\".",
                 ""
             );
+            if (commitMsg !== null && commitMsg.trim() !== "") {
+                commitMsg = commitMsg.trim();
+                const confirmed = confirm(
+                    `Confirm commit message:\n\n"${commitMsg}"\n\nOK  = commit with THIS name.\nCancel = use the default "Auto Backup - <date time>".`
+                );
+                if (!confirmed) {
+                    commitMsg = "";
+                }
+            } else {
+                commitMsg = "";
+            }
 
             // Show loader spinner on button
             const originalText = btn.textContent;
@@ -241,7 +252,7 @@ function bindTableActions() {
                 const res = await fetch(`/run/${id}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ commit_message: commitMsg || "" })
+                    body: JSON.stringify({ commit_message: commitMsg })
                 });
                 const result = await res.json();
                 

@@ -339,6 +339,7 @@ def run_backup(project_id, is_manual=False, commit_message=None):
 
     # 8. Add and Commit
     commit_sha = ""
+    commit_msg = ""
     if auto_commit:
         # Run git add in batches for filtered files
         batch_size = 100
@@ -430,7 +431,7 @@ def run_backup(project_id, is_manual=False, commit_message=None):
             return "FAILED", msg
             
         # Success push
-        msg = f"Backup completed successfully. Committed and pushed {changed_count} files."
+        msg = f"Backup completed successfully. Committed and pushed {changed_count} files as \"{commit_msg}\"."
         logger.log_event(name, "SUCCESS", msg, stdout=push_res.stdout)
         config_manager.update_project(project_id, {
             "last_status": "SUCCESS",
@@ -441,7 +442,7 @@ def run_backup(project_id, is_manual=False, commit_message=None):
         return "SUCCESS", msg
     else:
         # Success commit only
-        msg = f"Backup completed successfully. Committed {changed_count} files (push disabled)."
+        msg = f"Backup completed successfully. Committed {changed_count} files as \"{commit_msg}\" (push disabled)."
         logger.log_event(name, "SUCCESS", msg)
         config_manager.update_project(project_id, {
             "last_status": "SUCCESS",
