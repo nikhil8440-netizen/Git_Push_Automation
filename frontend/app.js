@@ -224,14 +224,25 @@ function bindTableActions() {
         btn.addEventListener('click', async (e) => {
             const tr = e.target.closest('tr');
             const id = tr.dataset.id;
-            
+
+            // Ask for an optional commit title. Blank / Cancel => default
+            // "Auto Backup - <date time>" format on the backend.
+            const commitMsg = prompt(
+                "Commit message for this backup (optional).\nLeave blank to use the default: \"Auto Backup - <date time>\".",
+                ""
+            );
+
             // Show loader spinner on button
             const originalText = btn.textContent;
             btn.innerHTML = `<span class="spinner"></span> Running...`;
             btn.disabled = true;
-            
+
             try {
-                const res = await fetch(`/run/${id}`, { method: 'POST' });
+                const res = await fetch(`/run/${id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ commit_message: commitMsg || "" })
+                });
                 const result = await res.json();
                 
                 if (res.ok && result.success) {

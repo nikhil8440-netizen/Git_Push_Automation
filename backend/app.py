@@ -90,13 +90,19 @@ def delete_project_api(project_id):
 
 @app.route('/run/<project_id>', methods=['POST'])
 def run_project_api(project_id):
-    """Manual trigger to run backup immediately. Respects lock file."""
+    """Manual trigger to run backup immediately. Respects lock file.
+
+    Accepts an optional JSON body {"commit_message": "..."}; if omitted or
+    blank, the backup uses the default "Auto Backup - <timestamp>" message.
+    """
     project = config_manager.get_project(project_id)
     if not project:
         return jsonify({"error": "Project not found"}), 404
-        
+
     name = project.get("name")
-    
+    data = request.get_json(silent=True) or {}
+    commit_message = data.get("commit_message")
+
     # Try to acquire lock
     if not git_runner.acquire_lock():
         msg = f"Run Now aborted for '{name}': another automation process is running."
@@ -106,9 +112,9 @@ def run_project_api(project_id):
             "status": "ALREADY_RUNNING",
             "message": "A backup process is already running. Please try again shortly."
         }), 409
-        
+
     try:
-        status, msg = git_runner.run_backup(project_id, is_manual=True)
+        status, msg = git_runner.run_backup(project_id, is_manual=True, commit_message=commit_message)
         return jsonify({
             "success": status in ["SUCCESS", "NO_CHANGES", "PENDING_RETRY"],
             "status": status,
@@ -124,6 +130,9 @@ def run_all_api():
     Acquires the lock once (like the scheduler) so the whole batch runs as a
     single unit and won't collide with a scheduled run.
     """
+    data = request.get_json(silent=True) or {}
+    commit_message = data.get("commit_message")
+
     if not git_runner.acquire_lock():
         msg = "Force Run aborted: another automation process is currently running."
         logger.log_event("System", "ALREADY_RUNNING", msg)
@@ -141,7 +150,7 @@ def run_all_api():
             if not project.get("enabled", True) or project.get("paused", False):
                 skipped += 1
                 continue
-            status, message = git_runner.run_backup(project.get("id"), is_manual=True)
+            status, message = git_runner.run_backup(project.get("id"), is_manual=True, commit_message=commit_message)
             results.append({"name": project.get("name"), "status": status, "message": message})
 
         ran = len(results)

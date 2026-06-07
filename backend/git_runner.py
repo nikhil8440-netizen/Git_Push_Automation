@@ -245,7 +245,7 @@ def ensure_git_repo(path, branch, origin, name, env):
 
     return True, "Repository ready."
 
-def run_backup(project_id, is_manual=False):
+def run_backup(project_id, is_manual=False, commit_message=None):
     """
     Run the Git backup sequence for a project.
     Assumes execution lock is handled by caller (scheduler or manual handler).
@@ -354,9 +354,13 @@ def run_backup(project_id, is_manual=False):
                 config_manager.update_project(project_id, {"last_status": "FAILED", "last_run": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
                 return "FAILED", msg
                 
-        # Commit
+        # Commit. Use the user-supplied title if given, otherwise fall back to
+        # the standard timestamped "Auto Backup" format.
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        commit_msg = f"Auto Backup - {timestamp}"
+        if commit_message and commit_message.strip():
+            commit_msg = commit_message.strip()
+        else:
+            commit_msg = f"Auto Backup - {timestamp}"
         commit_res = subprocess.run(
             ['git', 'commit', '-m', commit_msg],
             cwd=path, capture_output=True, text=True, env=env
