@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Git Manager - Local Git Automation Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-area">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="3"></circle><circle cx="12" cy="13" r="1"></circle></svg>
+                </div>
+                <div>
+                    <h1>Git Manager</h1>
+                    <p class="subtitle">Local Git Automation Engine & Dashboard</p>
+                </div>
+            </div>
+            
+            <!-- System Status Panel -->
+            <div class="system-status-container">
+                <div class="status-indicator-title">System Status</div>
+                <div class="status-indicators">
+                    <div class="status-item" id="sys-python" title="Python Executable State">
+                        <span class="status-dot"></span> Python
+                    </div>
+                    <div class="status-item" id="sys-git" title="Git Installation State">
+                        <span class="status-dot"></span> Git
+                    </div>
+                    <div class="status-item" id="sys-internet" title="Internet / Git Host Access">
+                        <span class="status-dot"></span> Network
+                    </div>
+                    <div class="status-item" id="sys-task" title="Windows Scheduled Task State">
+                        <span class="status-dot"></span> Scheduler
+                    </div>
+                    <div class="status-dryrun-toggle" title="Toggle Dry Run Simulation Mode">
+                        <label class="switch-container">
+                            <input type="checkbox" id="dry-run-checkbox">
+                            <span class="switch-slider"></span>
+                        </label>
+                        <span class="dryrun-label">Dry Run</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Health Summary Metrics -->
+        <section class="metrics-grid">
+            <div class="metric-card" id="metric-total">
+                <div class="metric-info">
+                    <h3>Total Projects</h3>
+                    <span class="metric-val">0</span>
+                </div>
+                <div class="metric-icon total">📂</div>
+            </div>
+            <div class="metric-card" id="metric-active">
+                <div class="metric-info">
+                    <h3>Active</h3>
+                    <span class="metric-val">0</span>
+                </div>
+                <div class="metric-icon active">⚡</div>
+            </div>
+            <div class="metric-card" id="metric-success">
+                <div class="metric-info">
+                    <h3>Successful</h3>
+                    <span class="metric-val">0</span>
+                </div>
+                <div class="metric-icon success">✓</div>
+            </div>
+            <div class="metric-card" id="metric-failed">
+                <div class="metric-info">
+                    <h3>Failed</h3>
+                    <span class="metric-val">0</span>
+                </div>
+                <div class="metric-icon failed">✗</div>
+            </div>
+            <div class="metric-card" id="metric-retry">
+                <div class="metric-info">
+                    <h3>Pending Retry</h3>
+                    <span class="metric-val">0</span>
+                </div>
+                <div class="metric-icon retry">⟳</div>
+            </div>
+            <div class="metric-card" id="metric-paused">
+                <div class="metric-info">
+                    <h3>Paused</h3>
+                    <span class="metric-val">0</span>
+                </div>
+                <div class="metric-icon paused">⏸</div>
+            </div>
+        </section>
+
+        <!-- Main Content Area -->
+        <main class="main-layout">
+            
+            <!-- Left Side: Table and Controls -->
+            <div class="content-left">
+                <div class="panel-card">
+                    <div class="panel-header">
+                        <h2>Monitored Repositories</h2>
+                        <div class="panel-header-actions">
+                            <button id="btn-force-run" class="btn btn-force" title="Back up ALL enabled repositories right now">
+                                <span class="btn-icon">⚡</span> Force Run All
+                            </button>
+                            <button id="btn-show-add" class="btn btn-primary">
+                                <span class="btn-icon">+</span> Add Repository
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="project-table">
+                            <thead>
+                                <tr>
+                                    <th>Project Name</th>
+                                    <th>Local Path</th>
+                                    <th>Branch</th>
+                                    <th>Status</th>
+                                    <th>Last Run</th>
+                                    <th>Enabled</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="projects-tbody">
+                                <!-- Populated dynamically -->
+                                <tr>
+                                    <td colspan="7" class="loading-state">
+                                        <div class="spinner"></div> Loading projects...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side: Add / Edit Form Panel -->
+            <div class="content-right" id="form-panel" style="display: none;">
+                <div class="panel-card form-card">
+                    <div class="panel-header">
+                        <h2 id="form-title">Add Repository</h2>
+                        <button id="btn-close-form" class="btn-close">&times;</button>
+                    </div>
+                    <form id="project-form" class="project-form">
+                        <input type="hidden" id="project-id">
+                        
+                        <div class="form-group">
+                            <label for="p-name">Project Name</label>
+                            <input type="text" id="p-name" placeholder="e.g. My Website Fun" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="p-path">Local Directory Path</label>
+                            <input type="text" id="p-path" placeholder="e.g. C:/Projects/MyWeb" required>
+                            <small class="form-help">Absolute local path on your Windows machine. If it isn't a Git repository yet, it will be initialized and linked to the remote automatically &mdash; you never need to run git yourself.</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="p-origin">Remote Origin URL (HTTPS or SSH)</label>
+                            <input type="text" id="p-origin" placeholder="e.g. git@github.com:user/repo.git" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="p-branch">Branch Name</label>
+                            <input type="text" id="p-branch" placeholder="main" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="p-interval">Backup Interval (Minutes)</label>
+                            <input type="number" id="p-interval" min="5" value="30" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="p-exclude">Excluded Paths (Comma separated)</label>
+                            <input type="text" id="p-exclude" placeholder=".venv, node_modules, dist, build">
+                            <small class="form-help">Changes inside these folders will be filtered out internally.</small>
+                        </div>
+
+                        <div class="toggles-grid">
+                            <div class="toggle-control">
+                                <label class="switch-container">
+                                    <input type="checkbox" id="p-enabled" checked>
+                                    <span class="switch-slider"></span>
+                                </label>
+                                <span class="toggle-label">Enabled</span>
+                            </div>
+                            
+                            <div class="toggle-control">
+                                <label class="switch-container">
+                                    <input type="checkbox" id="p-commit" checked>
+                                    <span class="switch-slider"></span>
+                                </label>
+                                <span class="toggle-label">Auto Commit</span>
+                            </div>
+                            
+                            <div class="toggle-control">
+                                <label class="switch-container">
+                                    <input type="checkbox" id="p-push" checked>
+                                    <span class="switch-slider"></span>
+                                </label>
+                                <span class="toggle-label">Auto Push</span>
+                            </div>
+                            
+                            <div class="toggle-control">
+                                <label class="switch-container">
+                                    <input type="checkbox" id="p-startup" checked>
+                                    <span class="switch-slider"></span>
+                                </label>
+                                <span class="toggle-label">Run on Startup</span>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" id="btn-cancel" class="btn btn-secondary">Cancel</button>
+                            <button type="submit" id="btn-save" class="btn btn-primary">Save Repository</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+
+        <!-- Bottom: Activity Log Panel -->
+        <section class="panel-card logs-panel">
+            <div class="panel-header">
+                <h2>Activity Log Panel</h2>
+                <div class="log-filters">
+                    <input type="text" id="log-search" placeholder="Search by project...">
+                    <select id="log-filter-status">
+                        <option value="">All Statuses</option>
+                        <option value="SUCCESS">SUCCESS</option>
+                        <option value="FAILED">FAILED</option>
+                        <option value="NO_CHANGES">NO_CHANGES</option>
+                        <option value="PENDING_RETRY">PENDING_RETRY</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="PAUSED">PAUSED</option>
+                        <option value="DISABLED">DISABLED</option>
+                        <option value="ALREADY_RUNNING">ALREADY_RUNNING</option>
+                    </select>
+                </div>
+            </div>
+            <div class="logs-container">
+                <div class="logs-header">
+                    <span class="col-time">Timestamp</span>
+                    <span class="col-proj">Project</span>
+                    <span class="col-status">Status</span>
+                    <span class="col-msg">Message</span>
+                    <span class="col-action">Details</span>
+                </div>
+                <div class="logs-body" id="logs-list-container">
+                    <!-- Logs list populated dynamically -->
+                    <div class="log-rowempty">No logs available.</div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Modal Dialog: Git Output Console -->
+        <div class="modal-overlay" id="log-modal" style="display: none;">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3 id="modal-log-title">Git Command Output</h3>
+                    <button class="btn-close" id="btn-close-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-info-row">
+                        <div><strong>Project:</strong> <span id="modal-project">Project Name</span></div>
+                        <div><strong>Timestamp:</strong> <span id="modal-timestamp">2026-06-07 12:30:00</span></div>
+                    </div>
+                    <div class="console-section">
+                        <h4>Standard Output (stdout)</h4>
+                        <pre id="modal-stdout" class="console-box stdout">No output recorded.</pre>
+                    </div>
+                    <div class="console-section">
+                        <h4>Standard Error (stderr)</h4>
+                        <pre id="modal-stderr" class="console-box stderr">No output recorded.</pre>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="btn-modal-close-footer">Close Console</button>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+    
+    <!-- App JavaScript -->
+    <script src="app.js"></script>
+</body>
+</html>

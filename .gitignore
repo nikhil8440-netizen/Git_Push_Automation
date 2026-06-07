@@ -1,0 +1,13 @@
+.venv/
+**/__pycache__/
+*.pyc
+*.log
+.vscode/
+.idea/
+backend/.lock
+
+# Personal / machine-specific runtime data — never push to GitHub
+backend/config.json
+backend/logs.json
+backend/*.corrupt
+shortcut/
