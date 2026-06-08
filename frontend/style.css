@@ -842,6 +842,34 @@ input:checked + .switch-slider:before {
     background: var(--bg-secondary);
 }
 
+/* Modal sizes */
+.modal-card.modal-sm {
+    max-width: 500px;
+}
+
+/* Custom Modal Button Styles */
+.btn-failed-custom,
+.btn-delete-custom {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-radius: 8px;
+    background: var(--color-failed);
+    color: white;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.btn-failed-custom:hover,
+.btn-delete-custom:hover {
+    background: #dc2626;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
+}
+
 /* Responsive adjustments */
 @media(max-width: 1024px) {
     .main-layout {

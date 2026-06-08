@@ -224,24 +224,15 @@ function bindTableActions() {
         btn.addEventListener('click', async (e) => {
             const tr = e.target.closest('tr');
             const id = tr.dataset.id;
+            const project = projects.find(p => p.id === id);
+            const repoName = project ? project.name : 'Unknown';
 
-            // Ask for an optional commit title, then confirm it so you can
-            // verify the app captured the name before it commits.
-            let commitMsg = prompt(
-                "Commit message for this backup (optional).\nLeave blank to use the default: \"Auto Backup - <date time>\".",
-                ""
-            );
-            if (commitMsg !== null && commitMsg.trim() !== "") {
-                commitMsg = commitMsg.trim();
-                const confirmed = confirm(
-                    `Confirm commit message:\n\n"${commitMsg}"\n\nOK  = commit with THIS name.\nCancel = use the default "Auto Backup - <date time>".`
-                );
-                if (!confirmed) {
-                    commitMsg = "";
-                }
-            } else {
-                commitMsg = "";
+            // Show custom backup prompt modal instead of native prompt + confirm
+            const promptResult = await showBackupPrompt(repoName);
+            if (!promptResult.run) {
+                return; // User cancelled the backup
             }
+            const commitMsg = promptResult.commitMsg || "";
 
             // Show loader spinner on button
             const originalText = btn.textContent;
@@ -257,13 +248,13 @@ function bindTableActions() {
                 const result = await res.json();
                 
                 if (res.ok && result.success) {
-                    alert(`Backup Completed!\nResult: ${result.message}`);
+                    await showAlert("Backup Completed", `Result: ${result.message}`);
                 } else {
-                    alert(`Backup Failed or Warning Raised:\n${result.message}`);
+                    await showAlert("Backup Issue", `Backup Failed or Warning Raised:\n${result.message}`, true);
                 }
             } catch (err) {
                 console.error("Run Now API failure:", err);
-                alert("An unexpected error occurred during execution.");
+                await showAlert("Error", "An unexpected error occurred during execution.", true);
             } finally {
                 // Refresh
                 await fetchInitialData();
@@ -287,13 +278,13 @@ function bindTableActions() {
                 const result = await res.json();
                 
                 if (res.ok && result.success) {
-                    alert("Test connection successful!");
+                    await showAlert("Test Connection", "Test connection successful!");
                 } else {
-                    alert(`Test connection failed:\n${result.message}`);
+                    await showAlert("Connection Failed", `Test connection failed:\n${result.message}`, true);
                 }
             } catch (err) {
                 console.error("Test connection failed:", err);
-                alert("Could not connect to server.");
+                await showAlert("Connection Error", "Could not connect to server.", true);
             } finally {
                 await fetchInitialData();
             }
@@ -362,7 +353,13 @@ function bindTableActions() {
             const project = projects.find(p => p.id === id);
             if (!project) return;
             
-            if (confirm(`Are you sure you want to delete project "${project.name}"?\nThis only removes it from Git Manager; your local files will NOT be affected.`)) {
+            const confirmed = await showConfirm(
+                "Delete Repository", 
+                `Are you sure you want to delete project "${project.name}"?\nThis only removes it from Git Manager; your local files will NOT be affected.`,
+                { isDelete: true, confirmText: "Delete" }
+            );
+            
+            if (confirmed) {
                 try {
                     const res = await fetch(`/projects/${id}`, { method: 'DELETE' });
                     if (res.ok) {
@@ -514,21 +511,27 @@ async function handleFormSubmit(e) {
             fetchInitialData();
         } else {
             const err = await res.json();
-            alert(`Error saving project: ${err.error}`);
+            await showAlert("Save Error", `Error saving project: ${err.error}`, true);
         }
     } catch (err) {
         console.error("API error while saving project:", err);
-        alert("Server connection failed.");
+        await showAlert("Connection Error", "Server connection failed.", true);
     }
 }
 
 async function handleForceRun() {
     const enabledCount = projects.filter(p => p.enabled && !p.paused).length;
     if (enabledCount === 0) {
-        alert("No enabled repositories to run. Add one or enable an existing project first.");
+        await showAlert("Force Run", "No enabled repositories to run. Add one or enable an existing project first.", true);
         return;
     }
-    if (!confirm(`Force Run will back up all ${enabledCount} enabled repositor${enabledCount === 1 ? 'y' : 'ies'} now. Continue?`)) {
+    
+    const confirmed = await showConfirm(
+        "Force Run All",
+        `Force Run will back up all ${enabledCount} enabled repositor${enabledCount === 1 ? 'y' : 'ies'} now. Continue?`,
+        { isForceRun: true, confirmText: "Run All" }
+    );
+    if (!confirmed) {
         return;
     }
 
@@ -540,13 +543,13 @@ async function handleForceRun() {
         const res = await fetch('/run-all', { method: 'POST' });
         const result = await res.json();
         if (res.ok && result.success) {
-            alert(`Force Run complete!\n${result.message}`);
+            await showAlert("Force Run Complete", `Force Run complete!\n${result.message}`);
         } else {
-            alert(`Force Run finished with issues:\n${result.message}`);
+            await showAlert("Force Run Warnings", `Force Run finished with issues:\n${result.message}`, true);
         }
     } catch (err) {
         console.error("Force Run API failure:", err);
-        alert("An unexpected error occurred during Force Run.");
+        await showAlert("Force Run Error", "An unexpected error occurred during Force Run.", true);
     } finally {
         btnForceRun.innerHTML = originalHtml;
         btnForceRun.disabled = false;
@@ -611,4 +614,185 @@ function escapeHTML(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+function setSafeMessageWithNewlines(element, text) {
+    element.innerHTML = '';
+    if (!text) return;
+    const lines = text.split('\n');
+    lines.forEach((line, index) => {
+        element.appendChild(document.createTextNode(line));
+        if (index < lines.length - 1) {
+            element.appendChild(document.createElement('br'));
+        }
+    });
+}
+
+// Promise-based Alert Helper
+function showAlert(title, message, isError = false) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('alert-modal');
+        const modalTitle = document.getElementById('alert-modal-title');
+        const modalMsg = document.getElementById('alert-modal-message');
+        const okBtn = document.getElementById('btn-ok-alert');
+        const closeBtn = document.getElementById('btn-close-alert-modal');
+
+        modalTitle.textContent = title;
+        setSafeMessageWithNewlines(modalMsg, message);
+        
+        if (isError) {
+            modalTitle.style.color = 'var(--color-failed)';
+            okBtn.className = 'btn btn-failed-custom';
+        } else {
+            modalTitle.style.color = 'var(--text-primary)';
+            okBtn.className = 'btn btn-primary';
+        }
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            okBtn.removeEventListener('click', onOk);
+            closeBtn.removeEventListener('click', onClose);
+            modal.removeEventListener('click', onOverlayClick);
+            window.removeEventListener('keydown', onKeyDown);
+        };
+
+        const onOk = () => {
+            cleanup();
+            resolve();
+        };
+
+        const onClose = () => {
+            cleanup();
+            resolve();
+        };
+
+        const onOverlayClick = (e) => {
+            if (e.target === modal) {
+                cleanup();
+                resolve();
+            }
+        };
+
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape' || e.key === 'Enter') {
+                cleanup();
+                resolve();
+            }
+        };
+
+        okBtn.addEventListener('click', onOk);
+        closeBtn.addEventListener('click', onClose);
+        modal.addEventListener('click', onOverlayClick);
+        window.addEventListener('keydown', onKeyDown);
+
+        modal.style.display = 'flex';
+        okBtn.focus();
+    });
+}
+
+// Promise-based Confirm Helper
+function showConfirm(title, message, options = {}) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('confirm-modal');
+        const modalTitle = document.getElementById('confirm-modal-title');
+        const modalMsg = document.getElementById('confirm-modal-message');
+        const acceptBtn = document.getElementById('btn-accept-confirm');
+        const cancelBtn = document.getElementById('btn-cancel-confirm');
+        const closeBtn = document.getElementById('btn-close-confirm-modal');
+
+        modalTitle.textContent = title;
+        setSafeMessageWithNewlines(modalMsg, message);
+
+        acceptBtn.textContent = options.confirmText || 'Confirm';
+        cancelBtn.textContent = options.cancelText || 'Cancel';
+
+        if (options.isDelete) {
+            acceptBtn.className = 'btn btn-delete-custom';
+            modalTitle.style.color = 'var(--color-failed)';
+        } else if (options.isForceRun) {
+            acceptBtn.className = 'btn btn-force';
+            modalTitle.style.color = 'var(--color-success)';
+        } else {
+            acceptBtn.className = 'btn btn-primary';
+            modalTitle.style.color = 'var(--text-primary)';
+        }
+
+        const cleanup = (value) => {
+            modal.style.display = 'none';
+            acceptBtn.removeEventListener('click', onAccept);
+            cancelBtn.removeEventListener('click', onCancel);
+            closeBtn.removeEventListener('click', onClose);
+            modal.removeEventListener('click', onOverlayClick);
+            window.removeEventListener('keydown', onKeyDown);
+            resolve(value);
+        };
+
+        const onAccept = () => cleanup(true);
+        const onCancel = () => cleanup(false);
+        const onClose = () => cleanup(false);
+        const onOverlayClick = (e) => {
+            if (e.target === modal) cleanup(false);
+        };
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape') cleanup(false);
+            if (e.key === 'Enter' && e.target !== cancelBtn && e.target !== closeBtn) cleanup(true);
+        };
+
+        acceptBtn.addEventListener('click', onAccept);
+        cancelBtn.addEventListener('click', onCancel);
+        closeBtn.addEventListener('click', onClose);
+        modal.addEventListener('click', onOverlayClick);
+        window.addEventListener('keydown', onKeyDown);
+
+        modal.style.display = 'flex';
+        acceptBtn.focus();
+    });
+}
+
+// Promise-based Backup Prompt Helper
+function showBackupPrompt(repoName) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('backup-modal');
+        const repoNameEl = document.getElementById('backup-modal-repo-name');
+        const commitMsgInput = document.getElementById('backup-commit-msg');
+        const runBtn = document.getElementById('btn-confirm-backup');
+        const cancelBtn = document.getElementById('btn-cancel-backup');
+        const closeBtn = document.getElementById('btn-close-backup-modal');
+
+        repoNameEl.textContent = `Repository: ${repoName}`;
+        commitMsgInput.value = '';
+
+        const cleanup = (value) => {
+            modal.style.display = 'none';
+            runBtn.removeEventListener('click', onRun);
+            cancelBtn.removeEventListener('click', onCancel);
+            closeBtn.removeEventListener('click', onClose);
+            modal.removeEventListener('click', onOverlayClick);
+            window.removeEventListener('keydown', onKeyDown);
+            resolve(value);
+        };
+
+        const onRun = () => {
+            const val = commitMsgInput.value.trim();
+            cleanup({ run: true, commitMsg: val });
+        };
+        const onCancel = () => cleanup({ run: false });
+        const onClose = () => cleanup({ run: false });
+        const onOverlayClick = (e) => {
+            if (e.target === modal) cleanup({ run: false });
+        };
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape') cleanup({ run: false });
+            if (e.key === 'Enter') onRun();
+        };
+
+        runBtn.addEventListener('click', onRun);
+        cancelBtn.addEventListener('click', onCancel);
+        closeBtn.addEventListener('click', onClose);
+        modal.addEventListener('click', onOverlayClick);
+        window.addEventListener('keydown', onKeyDown);
+
+        modal.style.display = 'flex';
+        commitMsgInput.focus();
+    });
 }

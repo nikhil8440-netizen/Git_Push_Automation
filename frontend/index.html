@@ -286,6 +286,64 @@
                 </div>
             </div>
         </div>
+
+        <!-- Custom Alert Modal -->
+        <div class="modal-overlay" id="alert-modal" style="display: none;">
+            <div class="modal-card modal-sm">
+                <div class="modal-header">
+                    <h3 id="alert-modal-title">Notification</h3>
+                    <button class="btn-close" id="btn-close-alert-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p id="alert-modal-message" style="word-break: break-word; white-space: pre-wrap;"></p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" id="btn-ok-alert">OK</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Confirm Modal -->
+        <div class="modal-overlay" id="confirm-modal" style="display: none;">
+            <div class="modal-card modal-sm">
+                <div class="modal-header">
+                    <h3 id="confirm-modal-title">Confirm Action</h3>
+                    <button class="btn-close" id="btn-close-confirm-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p id="confirm-modal-message" style="word-break: break-word; white-space: pre-wrap;"></p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="btn-cancel-confirm">Cancel</button>
+                    <button class="btn btn-primary" id="btn-accept-confirm">Confirm</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Backup Prompt Modal -->
+        <div class="modal-overlay" id="backup-modal" style="display: none;">
+            <div class="modal-card modal-sm">
+                <div class="modal-header">
+                    <h3>Run Repository Backup</h3>
+                    <button class="btn-close" id="btn-close-backup-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div style="margin-bottom: 1rem; border-left: 3px solid var(--primary); padding-left: 0.75rem;">
+                        <p id="backup-modal-repo-name" style="font-weight: 600; color: var(--text-primary);"></p>
+                        <p style="font-size: 0.813rem; color: var(--text-secondary); margin-top: 0.25rem;">Initiating manual backup. Your local files will be committed and pushed.</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="backup-commit-msg">Commit Title / Message (Optional)</label>
+                        <input type="text" id="backup-commit-msg" placeholder="e.g. Added login styles" style="width: 100%; margin-top: 0.25rem;">
+                        <small class="form-help">Leave blank to use default: <code>Auto Backup - &lt;date time&gt;</code></small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="btn-cancel-backup">Cancel</button>
+                    <button class="btn btn-primary" id="btn-confirm-backup">Run Now</button>
+                </div>
+            </div>
+        </div>
         
     </div>
     
