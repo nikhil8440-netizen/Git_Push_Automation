@@ -136,6 +136,80 @@ def get_git_env():
     env['GIT_SSH_COMMAND'] = 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new'
     return env
 
+def get_git_identity():
+    """Read global git user.name and user.email."""
+    env = get_git_env()
+    name_res = subprocess.run(['git', 'config', '--global', 'user.name'],
+                              capture_output=True, text=True, env=env)
+    email_res = subprocess.run(['git', 'config', '--global', 'user.email'],
+                               capture_output=True, text=True, env=env)
+    name = name_res.stdout.strip() if name_res.returncode == 0 else ""
+    email = email_res.stdout.strip() if email_res.returncode == 0 else ""
+    return {"name": name, "email": email, "configured": bool(name and email)}
+
+def set_git_identity(name, email):
+    """Set global git user.name and user.email. Returns (success, message)."""
+    env = get_git_env()
+    name_res = subprocess.run(['git', 'config', '--global', 'user.name', name],
+                              capture_output=True, text=True, env=env)
+    if name_res.returncode != 0:
+        return False, f"Failed to set user.name: {name_res.stderr.strip()}"
+    email_res = subprocess.run(['git', 'config', '--global', 'user.email', email],
+                               capture_output=True, text=True, env=env)
+    if email_res.returncode != 0:
+        return False, f"Failed to set user.email: {email_res.stderr.strip()}"
+    return True, "Git identity configured successfully."
+
+def get_git_auth_status():
+    """Check whether GitHub HTTPS credentials are stored (used on Linux)."""
+    env = get_git_env()
+    helper_res = subprocess.run(
+        ['git', 'config', '--global', 'credential.helper'],
+        capture_output=True, text=True, env=env
+    )
+    helper = helper_res.stdout.strip() if helper_res.returncode == 0 else ""
+
+    cred_input = "protocol=https\nhost=github.com\n\n"
+    fill_res = subprocess.run(
+        ['git', 'credential', 'fill'],
+        input=cred_input, capture_output=True, text=True, env=env, timeout=5
+    )
+    has_credentials = fill_res.returncode == 0 and 'password=' in fill_res.stdout
+
+    return {
+        "helper": helper,
+        "has_credentials": has_credentials,
+        "needs_setup": not has_credentials
+    }
+
+
+def store_github_pat(username, token):
+    """Store a GitHub PAT via git credential approve. Sets store helper if none configured."""
+    env = get_git_env()
+
+    helper_res = subprocess.run(
+        ['git', 'config', '--global', 'credential.helper'],
+        capture_output=True, text=True, env=env
+    )
+    if not helper_res.stdout.strip():
+        set_res = subprocess.run(
+            ['git', 'config', '--global', 'credential.helper', 'store'],
+            capture_output=True, text=True, env=env
+        )
+        if set_res.returncode != 0:
+            return False, f"Failed to configure credential helper: {set_res.stderr.strip()}"
+
+    cred_input = f"protocol=https\nhost=github.com\nusername={username}\npassword={token}\n\n"
+    approve_res = subprocess.run(
+        ['git', 'credential', 'approve'],
+        input=cred_input, capture_output=True, text=True, env=env, timeout=10
+    )
+    if approve_res.returncode != 0:
+        return False, f"Failed to store credentials: {approve_res.stderr.strip()}"
+
+    return True, "GitHub credentials stored successfully."
+
+
 def test_project_connection(project_id):
     """Test connectivity to the project's remote origin.
 

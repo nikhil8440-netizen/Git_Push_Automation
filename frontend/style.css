@@ -847,6 +847,44 @@ input:checked + .switch-slider:before {
     max-width: 500px;
 }
 
+/* All status indicators are clickable */
+.status-item {
+    cursor: pointer;
+    user-select: none;
+}
+.status-item:hover {
+    opacity: 0.75;
+}
+
+/* Back button in form panel header */
+.btn-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.3rem 0.65rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+.btn-back:hover {
+    border-color: var(--primary);
+    color: var(--text-primary);
+    background: var(--primary-glow);
+}
+
+.panel-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
 /* Custom Modal Button Styles */
 .btn-failed-custom,
 .btn-delete-custom {

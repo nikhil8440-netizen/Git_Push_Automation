@@ -13,9 +13,14 @@ from backend import git_runner
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
 
 def check_task_registered():
-    """Verify if the 'Git Manager' task is registered in Windows Task Scheduler."""
+    """Verify if the 'Git Manager' scheduled task is registered.
+
+    Windows: checks Windows Task Scheduler via schtasks.
+    macOS/Linux: automation via Task Scheduler is not applicable; returns False.
+    """
+    if sys.platform != 'win32':
+        return False
     try:
-        # Run schtasks /query to check if the task exists
         res = subprocess.run(
             ['schtasks', '/query', '/tn', 'Git Manager'],
             capture_output=True, text=True, shell=True
@@ -172,22 +177,60 @@ def test_connection_api(project_id):
     res = git_runner.test_project_connection(project_id)
     return jsonify(res)
 
+@app.route('/git-auth', methods=['GET'])
+def get_git_auth_api():
+    """Get GitHub credential status (whether a PAT is stored)."""
+    return jsonify(git_runner.get_git_auth_status())
+
+@app.route('/git-auth', methods=['POST'])
+def set_git_auth_api():
+    """Store a GitHub PAT via git credential approve."""
+    data = request.json or {}
+    username = data.get("username", "").strip()
+    token = data.get("token", "").strip()
+    if not username or not token:
+        return jsonify({"error": "Both GitHub username and token are required"}), 400
+    success, message = git_runner.store_github_pat(username, token)
+    if success:
+        return jsonify({"success": True, "message": message})
+    return jsonify({"success": False, "error": message}), 500
+
+@app.route('/git-identity', methods=['GET'])
+def get_git_identity_api():
+    """Get current global git identity (user.name and user.email)."""
+    return jsonify(git_runner.get_git_identity())
+
+@app.route('/git-identity', methods=['POST'])
+def set_git_identity_api():
+    """Set global git identity (user.name and user.email)."""
+    data = request.json or {}
+    name = data.get("name", "").strip()
+    email = data.get("email", "").strip()
+    if not name or not email:
+        return jsonify({"error": "Both name and email are required"}), 400
+    success, message = git_runner.set_git_identity(name, email)
+    if success:
+        return jsonify({"success": True, "message": message})
+    return jsonify({"success": False, "error": message}), 500
+
 @app.route('/system-status', methods=['GET'])
 def system_status_api():
     """Retrieve system diagnostics status."""
     python_installed = sys.executable is not None
     git_installed = git_runner.check_git_installed()
-    # Check general internet connection to github.com
     internet_available = git_runner.check_internet()
     task_registered = check_task_registered()
     dry_run = config_manager.is_dry_run()
-    
+    git_identity = git_runner.get_git_identity()
+
     return jsonify({
         "python_installed": python_installed,
         "git_installed": git_installed,
         "internet_available": internet_available,
         "task_registered": task_registered,
-        "dry_run": dry_run
+        "dry_run": dry_run,
+        "git_identity": git_identity,
+        "platform": sys.platform
     })
 
 @app.route('/logs', methods=['GET'])

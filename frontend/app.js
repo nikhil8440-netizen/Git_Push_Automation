@@ -37,11 +37,18 @@ const modalStderr = document.getElementById('modal-stderr');
 const btnCloseModal = document.getElementById('btn-close-modal');
 const btnModalCloseFooter = document.getElementById('btn-modal-close-footer');
 
+// Git Identity Modal Elements
+const gitIdentityModal = document.getElementById('git-identity-modal');
+const gitIdentityName = document.getElementById('git-identity-name');
+const gitIdentityEmail = document.getElementById('git-identity-email');
+
 // Initialize Application
-document.addEventListener('DOMContentLoaded', () => {
-    fetchInitialData();
+document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     startPolling();
+    await fetchInitialData();
+    await checkAndPromptGitIdentity();
+    await checkAndPromptGitAuth();
 });
 
 // Setup event listeners
@@ -57,6 +64,7 @@ function setupEventListeners() {
     // Close form buttons
     btnCloseForm.addEventListener('click', hideForm);
     btnCancel.addEventListener('click', hideForm);
+    document.getElementById('btn-back-form').addEventListener('click', hideForm);
 
     // Form submission
     projectForm.addEventListener('submit', handleFormSubmit);
@@ -438,13 +446,80 @@ function updateMetrics() {
 
 // UI Rendering - System Status Panel Indicators
 function renderSystemStatus() {
-    // Bind status checks to HTML indicators
     bindIndicatorState('sys-python', systemStatus.python_installed);
     bindIndicatorState('sys-git', systemStatus.git_installed);
     bindIndicatorState('sys-internet', systemStatus.internet_available);
     bindIndicatorState('sys-task', systemStatus.task_registered);
-    
-    // Set Dry Run toggle state
+
+    // Python
+    const pythonEl = document.getElementById('sys-python');
+    if (pythonEl) {
+        pythonEl.onclick = () => showAlert(
+            'Python',
+            systemStatus.python_installed
+                ? 'Python is installed and detected.\n\nThe Flask server and all git operations are running on this Python installation.'
+                : 'Python was not detected in PATH.\n\nThe server appears to be running, so this may be a transient detection issue — try refreshing.',
+            !systemStatus.python_installed
+        );
+    }
+
+    // Git
+    const gitEl = document.getElementById('sys-git');
+    if (gitEl) {
+        gitEl.onclick = () => showAlert(
+            'Git',
+            systemStatus.git_installed
+                ? 'Git is installed and available in PATH.\n\nAll backup operations (init, add, commit, push) are ready.'
+                : 'Git was not found in PATH.\n\nInstall Git and make sure it is added to your system PATH, then restart the server.\n\nWindows: git-scm.com\nmacOS: brew install git\nLinux: sudo apt install git',
+            !systemStatus.git_installed
+        );
+    }
+
+    // Identity — opens setup modal
+    const identityConfigured = systemStatus.git_identity?.configured;
+    bindIndicatorState('sys-identity', identityConfigured);
+    const identityEl = document.getElementById('sys-identity');
+    if (identityEl) {
+        identityEl.onclick = () => showGitIdentityModal(identityConfigured);
+    }
+
+    // Network
+    const netEl = document.getElementById('sys-internet');
+    if (netEl) {
+        netEl.onclick = () => showAlert(
+            'Network',
+            systemStatus.internet_available
+                ? 'Network is reachable.\n\nGitHub is accessible — pushes should work normally.'
+                : 'Cannot reach GitHub.\n\nCheck your internet connection. Backups will still commit locally and be marked "Pending Retry" — they will push automatically once connectivity is restored.',
+            !systemStatus.internet_available
+        );
+    }
+
+    // Scheduler
+    const taskEl = document.getElementById('sys-task');
+    if (taskEl) {
+        taskEl.onclick = () => {
+            const platform = systemStatus.platform || 'win32';
+            if (platform !== 'win32') {
+                showAlert(
+                    'Scheduler',
+                    'Automated scheduling via Task Scheduler is Windows-only.\n\nOn macOS and Linux, use "Run Now" or "Force Run All" from the dashboard.\n\nTo run on a schedule, set up a cron job manually:\n  python -m backend.scheduler'
+                );
+            } else if (systemStatus.task_registered) {
+                showAlert(
+                    'Scheduler',
+                    'Windows Task Scheduler task is registered.\n\nThe backup engine runs automatically at logon and on each repo\'s configured interval — even when the dashboard is closed.'
+                );
+            } else {
+                showAlert(
+                    'Scheduler',
+                    'Windows Task Scheduler task is not registered.\n\nTo enable automatic background backups, open PowerShell as Administrator and run:\n\ncd backend\n.\\create_task.ps1\n\nRemove it anytime with remove_task.ps1.',
+                    true
+                );
+            }
+        };
+    }
+
     if (systemStatus.dry_run !== undefined) {
         dryRunCheckbox.checked = systemStatus.dry_run;
     }
@@ -453,7 +528,6 @@ function renderSystemStatus() {
 function bindIndicatorState(elementId, isOk) {
     const el = document.getElementById(elementId);
     if (!el) return;
-    
     if (isOk) {
         el.className = 'status-item ok';
         el.querySelector('.status-dot').style.backgroundColor = 'var(--color-success)';
@@ -461,6 +535,182 @@ function bindIndicatorState(elementId, isOk) {
         el.className = 'status-item problem';
         el.querySelector('.status-dot').style.backgroundColor = 'var(--color-failed)';
     }
+}
+
+// Git Identity Setup
+async function checkAndPromptGitIdentity() {
+    try {
+        const res = await fetch('/git-identity');
+        if (!res.ok) return;
+        const identity = await res.json();
+        if (!identity.configured) {
+            await showGitIdentityModal(false);
+        }
+    } catch (err) {
+        console.error("Could not check git identity:", err);
+    }
+}
+
+function showGitIdentityModal(isAlreadyConfigured) {
+    return new Promise((resolve) => {
+        const title = document.getElementById('git-identity-modal-title');
+        title.textContent = isAlreadyConfigured ? 'Update Git Identity' : 'Git Identity Setup';
+
+        if (systemStatus.git_identity) {
+            gitIdentityName.value = systemStatus.git_identity.name || '';
+            gitIdentityEmail.value = systemStatus.git_identity.email || '';
+        }
+
+        gitIdentityModal.style.display = 'flex';
+        gitIdentityName.focus();
+
+        const saveBtn = document.getElementById('btn-save-identity');
+        const skipBtn = document.getElementById('btn-skip-identity');
+        const closeBtn = document.getElementById('btn-close-identity-modal');
+
+        const cleanup = () => {
+            gitIdentityModal.style.display = 'none';
+            saveBtn.removeEventListener('click', onSave);
+            skipBtn.removeEventListener('click', onSkip);
+            closeBtn.removeEventListener('click', onSkip);
+            gitIdentityModal.removeEventListener('click', onOverlay);
+            window.removeEventListener('keydown', onKey);
+            resolve();
+        };
+
+        const onSave = async () => {
+            const name = gitIdentityName.value.trim();
+            const email = gitIdentityEmail.value.trim();
+            if (!name || !email) {
+                await showAlert("Missing Fields", "Please enter both a name and an email address.", true);
+                return;
+            }
+            try {
+                const res = await fetch('/git-identity', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email })
+                });
+                const result = await res.json();
+                if (res.ok && result.success) {
+                    cleanup();
+                    await showAlert("Identity Saved", `Git identity set:\n${name} <${email}>\n\nYou're all set. The first time you push to GitHub, a browser window will open to sign in — that's normal.`);
+                    fetchSystemStatus();
+                } else {
+                    await showAlert("Error", result.error || "Failed to save git identity.", true);
+                }
+            } catch (err) {
+                await showAlert("Error", "Could not reach the server.", true);
+            }
+        };
+
+        const onSkip = () => cleanup();
+        const onOverlay = (e) => { if (e.target === gitIdentityModal) cleanup(); };
+        const onKey = (e) => {
+            if (e.key === 'Escape') cleanup();
+            if (e.key === 'Enter') onSave();
+        };
+
+        saveBtn.addEventListener('click', onSave);
+        skipBtn.addEventListener('click', onSkip);
+        closeBtn.addEventListener('click', onSkip);
+        gitIdentityModal.addEventListener('click', onOverlay);
+        window.addEventListener('keydown', onKey);
+    });
+}
+
+// GitHub PAT Auth Setup (Linux only)
+async function checkAndPromptGitAuth() {
+    if (systemStatus.platform !== 'linux') return;
+    try {
+        const res = await fetch('/git-auth');
+        if (!res.ok) return;
+        const auth = await res.json();
+        if (auth.needs_setup) {
+            await showGitAuthModal();
+        }
+    } catch (err) {
+        console.error("Could not check git auth status:", err);
+    }
+}
+
+function showGitAuthModal() {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('git-auth-modal');
+        const usernameInput = document.getElementById('git-auth-username');
+        const tokenInput = document.getElementById('git-auth-token');
+        const saveBtn = document.getElementById('btn-save-auth');
+        const skipBtn = document.getElementById('btn-skip-auth');
+        const closeBtn = document.getElementById('btn-close-auth-modal');
+        const toggleBtn = document.getElementById('btn-toggle-pat');
+
+        usernameInput.value = '';
+        tokenInput.value = '';
+        tokenInput.type = 'password';
+        toggleBtn.textContent = 'Show';
+
+        toggleBtn.onclick = () => {
+            if (tokenInput.type === 'password') {
+                tokenInput.type = 'text';
+                toggleBtn.textContent = 'Hide';
+            } else {
+                tokenInput.type = 'password';
+                toggleBtn.textContent = 'Show';
+            }
+        };
+
+        modal.style.display = 'flex';
+        usernameInput.focus();
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            saveBtn.removeEventListener('click', onSave);
+            skipBtn.removeEventListener('click', onSkip);
+            closeBtn.removeEventListener('click', onSkip);
+            modal.removeEventListener('click', onOverlay);
+            window.removeEventListener('keydown', onKey);
+            resolve();
+        };
+
+        const onSave = async () => {
+            const username = usernameInput.value.trim();
+            const token = tokenInput.value.trim();
+            if (!username || !token) {
+                await showAlert("Missing Fields", "Please enter both your GitHub username and token.", true);
+                return;
+            }
+            try {
+                const res = await fetch('/git-auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, token })
+                });
+                const result = await res.json();
+                if (res.ok && result.success) {
+                    cleanup();
+                    await showAlert("Credentials Saved", "GitHub credentials stored successfully.\n\nAll future pushes will authenticate automatically — no login needed.");
+                    fetchSystemStatus();
+                } else {
+                    await showAlert("Error", result.error || "Failed to store credentials.", true);
+                }
+            } catch (err) {
+                await showAlert("Error", "Could not reach the server.", true);
+            }
+        };
+
+        const onSkip = () => cleanup();
+        const onOverlay = (e) => { if (e.target === modal) cleanup(); };
+        const onKey = (e) => {
+            if (e.key === 'Escape') cleanup();
+            if (e.key === 'Enter' && document.activeElement !== skipBtn) onSave();
+        };
+
+        saveBtn.addEventListener('click', onSave);
+        skipBtn.addEventListener('click', onSkip);
+        closeBtn.addEventListener('click', onSkip);
+        modal.addEventListener('click', onOverlay);
+        window.addEventListener('keydown', onKey);
+    });
 }
 
 // Event Handlers
