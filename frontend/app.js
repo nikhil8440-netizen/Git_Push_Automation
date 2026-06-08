@@ -188,7 +188,7 @@ function renderProjects() {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-action run-now" ${!isEnabled || isPaused ? 'disabled' : ''}>Run Now</button>
+                        <button class="btn-action run-now" ${!isEnabled || isPaused ? 'disabled' : ''}>Push Now</button>
                         <button class="btn-action test-conn">Test Conn</button>
                         <button class="btn-action toggle-pause">${isPaused ? 'Resume' : 'Pause'}</button>
                         <button class="btn-action edit-proj">Edit</button>
@@ -886,69 +886,55 @@ function hideRunningOverlay() {
     document.getElementById('run-loading-overlay').style.display = 'none';
 }
 
-// Promise-based Alert Helper
+// Toast Notification (replaces center-screen alert modal)
 function showAlert(title, message, isError = false, isSuccess = false) {
-    return new Promise((resolve) => {
-        const modal = document.getElementById('alert-modal');
-        const modalTitle = document.getElementById('alert-modal-title');
-        const modalMsg = document.getElementById('alert-modal-message');
-        const okBtn = document.getElementById('btn-ok-alert');
-        const closeBtn = document.getElementById('btn-close-alert-modal');
+    const container = document.getElementById('toast-container');
 
-        modalTitle.textContent = title;
-        setSafeMessageWithNewlines(modalMsg, message);
+    const type = isError ? 'error' : isSuccess ? 'success' : 'info';
+    const icon = isError ? '✕' : isSuccess ? '✓' : 'i';
 
-        if (isError) {
-            modalTitle.style.color = 'var(--color-failed)';
-            okBtn.className = 'btn btn-failed-custom';
-        } else if (isSuccess) {
-            modalTitle.style.color = 'var(--color-success)';
-            okBtn.className = 'btn btn-success-custom';
-        } else {
-            modalTitle.style.color = 'var(--text-primary)';
-            okBtn.className = 'btn btn-primary';
-        }
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
 
-        const cleanup = () => {
-            modal.style.display = 'none';
-            okBtn.removeEventListener('click', onOk);
-            closeBtn.removeEventListener('click', onClose);
-            modal.removeEventListener('click', onOverlayClick);
-            window.removeEventListener('keydown', onKeyDown);
-        };
+    const iconEl = document.createElement('div');
+    iconEl.className = 'toast-icon';
+    iconEl.textContent = icon;
 
-        const onOk = () => {
-            cleanup();
-            resolve();
-        };
+    const titleEl = document.createElement('div');
+    titleEl.className = 'toast-title';
+    titleEl.textContent = title;
 
-        const onClose = () => {
-            cleanup();
-            resolve();
-        };
+    const msgEl = document.createElement('div');
+    msgEl.className = 'toast-message';
+    setSafeMessageWithNewlines(msgEl, message);
 
-        const onOverlayClick = (e) => {
-            if (e.target === modal) {
-                cleanup();
-                resolve();
-            }
-        };
+    const body = document.createElement('div');
+    body.className = 'toast-body';
+    body.appendChild(titleEl);
+    body.appendChild(msgEl);
 
-        const onKeyDown = (e) => {
-            if (e.key === 'Escape' || e.key === 'Enter') {
-                cleanup();
-                resolve();
-            }
-        };
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'toast-close';
+    closeBtn.textContent = '×';
 
-        okBtn.addEventListener('click', onOk);
-        closeBtn.addEventListener('click', onClose);
-        modal.addEventListener('click', onOverlayClick);
-        window.addEventListener('keydown', onKeyDown);
+    const progress = document.createElement('div');
+    progress.className = 'toast-progress';
 
-        modal.style.display = 'flex';
-        okBtn.focus();
-    });
+    toast.appendChild(iconEl);
+    toast.appendChild(body);
+    toast.appendChild(closeBtn);
+    toast.appendChild(progress);
+    container.appendChild(toast);
+
+    const dismiss = () => {
+        toast.style.animation = 'toastOut 0.35s ease-in forwards';
+        setTimeout(() => toast.remove(), 350);
+    };
+
+    const timer = setTimeout(dismiss, 4000);
+    closeBtn.addEventListener('click', () => { clearTimeout(timer); dismiss(); });
+
+    return Promise.resolve();
 }
 
 // Promise-based Confirm Helper
