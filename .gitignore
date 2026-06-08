@@ -16,5 +16,11 @@ shortcut/
 CLAUDE.md
 CONTEXT.md
 USERMANUAL.md
-AGENT_PROTOCOL.md
+WRAPUP_PROTOCOL.md
+ARCHITECTURE.md
+GOODLUCK.md
 .claude/
+
+# Graphify knowledge graph — local only, regenerate with: graphify update .
+graphify-out/
+.graphifyignore
