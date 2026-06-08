@@ -381,6 +381,33 @@ def run_backup(project_id, is_manual=False, commit_message=None):
     changed_files = parse_git_status(status_res.stdout, excluded_paths)
     
     if not changed_files:
+        # No local file changes — but check for commits that were made locally
+        # but never pushed (e.g. from a previous run where push failed).
+        if auto_push and origin:
+            ahead_res = subprocess.run(
+                ['git', 'rev-list', '--count', f'origin/{branch}..HEAD'],
+                cwd=path, capture_output=True, text=True, env=env
+            )
+            if ahead_res.returncode == 0 and ahead_res.stdout.strip().isdigit():
+                unpushed = int(ahead_res.stdout.strip())
+                if unpushed > 0:
+                    git_host = extract_host(origin)
+                    port = 22 if "git@" in origin else 443
+                    if check_internet(host=git_host, port=port):
+                        push_res = subprocess.run(
+                            ['git', 'push', '-u', 'origin', branch],
+                            cwd=path, capture_output=True, text=True, env=env, timeout=60
+                        )
+                        if push_res.returncode == 0:
+                            msg = f"Pushed {unpushed} previously committed but unpushed commit(s) to remote."
+                            logger.log_event(name, "SUCCESS", msg, stdout=push_res.stdout)
+                            config_manager.update_project(project_id, {
+                                "last_status": "SUCCESS",
+                                "last_run": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "last_push": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            })
+                            return "SUCCESS", msg
+
         msg = "No changes detected (excluding ignored paths)."
         logger.log_event(name, "NO_CHANGES", msg)
         config_manager.update_project(project_id, {
@@ -535,7 +562,31 @@ def run_backup(project_id, is_manual=False, commit_message=None):
             if "Authentication failed" in err_output or "Permission denied" in err_output or "fatal: Could not read from remote repository" in err_output:
                 msg = "Push failed: Authentication failed."
             elif "rejected" in err_output or "non-fast-forward" in err_output:
-                msg = "Push failed: Push rejected (non-fast-forward)."
+                # Remote has commits local doesn't have — pull and rebase, then retry.
+                logger.log_event(name, "WARNING", "Push rejected (remote diverged). Attempting auto-rebase...")
+                pull_res = subprocess.run(
+                    ['git', 'pull', '--rebase', 'origin', branch],
+                    cwd=path, capture_output=True, text=True, env=env, timeout=60
+                )
+                if pull_res.returncode == 0:
+                    retry_res = subprocess.run(
+                        ['git', 'push', '-u', 'origin', branch],
+                        cwd=path, capture_output=True, text=True, env=env, timeout=60
+                    )
+                    if retry_res.returncode == 0:
+                        msg = f"Backup completed successfully (synced remote changes and pushed as \"{commit_msg}\")."
+                        logger.log_event(name, "SUCCESS", msg, stdout=retry_res.stdout)
+                        config_manager.update_project(project_id, {
+                            "last_status": "SUCCESS",
+                            "last_run": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "last_commit": commit_sha if commit_sha else project.get("last_commit", ""),
+                            "last_push": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        })
+                        return "SUCCESS", msg
+                    else:
+                        msg = f"Push failed after rebase: {retry_res.stderr.strip()}"
+                else:
+                    msg = f"Push rejected and auto-rebase failed (possible merge conflict): {pull_res.stderr.strip()}"
             else:
                 msg = f"Push failed: {err_output}"
             logger.log_event(name, "FAILED", msg, stdout=push_res.stdout, stderr=push_res.stderr)
