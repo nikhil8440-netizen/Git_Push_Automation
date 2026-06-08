@@ -384,29 +384,66 @@ def run_backup(project_id, is_manual=False, commit_message=None):
         # No local file changes — but check for commits that were made locally
         # but never pushed (e.g. from a previous run where push failed).
         if auto_push and origin:
-            ahead_res = subprocess.run(
-                ['git', 'rev-list', '--count', f'origin/{branch}..HEAD'],
+            unpushed = 0
+            # Check whether the remote tracking ref exists yet
+            tracking_res = subprocess.run(
+                ['git', 'rev-parse', '--verify', f'refs/remotes/origin/{branch}'],
                 cwd=path, capture_output=True, text=True, env=env
             )
-            if ahead_res.returncode == 0 and ahead_res.stdout.strip().isdigit():
-                unpushed = int(ahead_res.stdout.strip())
-                if unpushed > 0:
-                    git_host = extract_host(origin)
-                    port = 22 if "git@" in origin else 443
-                    if check_internet(host=git_host, port=port):
-                        push_res = subprocess.run(
-                            ['git', 'push', '-u', 'origin', branch],
+            if tracking_res.returncode != 0:
+                # Remote tracking ref doesn't exist — push has never succeeded.
+                # If HEAD exists (there are commits), we need to push them.
+                head_res = subprocess.run(
+                    ['git', 'rev-parse', '--verify', 'HEAD'],
+                    cwd=path, capture_output=True, text=True, env=env
+                )
+                unpushed = 1 if head_res.returncode == 0 else 0
+            else:
+                # Tracking ref exists — count how many local commits are ahead of it.
+                ahead_res = subprocess.run(
+                    ['git', 'rev-list', '--count', f'origin/{branch}..HEAD'],
+                    cwd=path, capture_output=True, text=True, env=env
+                )
+                if ahead_res.returncode == 0 and ahead_res.stdout.strip().isdigit():
+                    unpushed = int(ahead_res.stdout.strip())
+
+            if unpushed > 0:
+                git_host = extract_host(origin)
+                port = 22 if "git@" in origin else 443
+                if check_internet(host=git_host, port=port):
+                    push_res = subprocess.run(
+                        ['git', 'push', '-u', 'origin', branch],
+                        cwd=path, capture_output=True, text=True, env=env, timeout=60
+                    )
+                    if push_res.returncode == 0:
+                        msg = "Pushed previously committed but unpushed commit(s) to remote."
+                        logger.log_event(name, "SUCCESS", msg, stdout=push_res.stdout)
+                        config_manager.update_project(project_id, {
+                            "last_status": "SUCCESS",
+                            "last_run": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "last_push": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        })
+                        return "SUCCESS", msg
+                    elif "rejected" in push_res.stderr or "non-fast-forward" in push_res.stderr:
+                        # Remote has diverged — pull rebase then retry
+                        pull_res = subprocess.run(
+                            ['git', 'pull', '--rebase', 'origin', branch],
                             cwd=path, capture_output=True, text=True, env=env, timeout=60
                         )
-                        if push_res.returncode == 0:
-                            msg = f"Pushed {unpushed} previously committed but unpushed commit(s) to remote."
-                            logger.log_event(name, "SUCCESS", msg, stdout=push_res.stdout)
-                            config_manager.update_project(project_id, {
-                                "last_status": "SUCCESS",
-                                "last_run": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                "last_push": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            })
-                            return "SUCCESS", msg
+                        if pull_res.returncode == 0:
+                            retry_res = subprocess.run(
+                                ['git', 'push', '-u', 'origin', branch],
+                                cwd=path, capture_output=True, text=True, env=env, timeout=60
+                            )
+                            if retry_res.returncode == 0:
+                                msg = "Pushed pending commits after syncing remote changes."
+                                logger.log_event(name, "SUCCESS", msg, stdout=retry_res.stdout)
+                                config_manager.update_project(project_id, {
+                                    "last_status": "SUCCESS",
+                                    "last_run": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                    "last_push": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                })
+                                return "SUCCESS", msg
 
         msg = "No changes detected (excluding ignored paths)."
         logger.log_event(name, "NO_CHANGES", msg)
