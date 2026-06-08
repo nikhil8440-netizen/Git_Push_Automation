@@ -242,10 +242,8 @@ function bindTableActions() {
             }
             const commitMsg = promptResult.commitMsg || "";
 
-            // Show loader spinner on button
-            const originalText = btn.textContent;
-            btn.innerHTML = `<span class="spinner"></span> Running...`;
             btn.disabled = true;
+            showRunningOverlay();
 
             try {
                 const res = await fetch(`/run/${id}`, {
@@ -254,17 +252,19 @@ function bindTableActions() {
                     body: JSON.stringify({ commit_message: commitMsg })
                 });
                 const result = await res.json();
-                
+                hideRunningOverlay();
+
                 if (res.ok && result.success) {
-                    await showAlert("Backup Completed", `Result: ${result.message}`);
+                    await showAlert("Pushed to GitHub", result.message, false, true);
                 } else {
                     await showAlert("Backup Issue", `Backup Failed or Warning Raised:\n${result.message}`, true);
                 }
             } catch (err) {
+                hideRunningOverlay();
                 console.error("Run Now API failure:", err);
                 await showAlert("Error", "An unexpected error occurred during execution.", true);
             } finally {
-                // Refresh
+                btn.disabled = false;
                 await fetchInitialData();
             }
         });
@@ -785,23 +785,23 @@ async function handleForceRun() {
         return;
     }
 
-    const originalHtml = btnForceRun.innerHTML;
-    btnForceRun.innerHTML = `<span class="spinner"></span> Running all...`;
     btnForceRun.disabled = true;
+    showRunningOverlay();
 
     try {
         const res = await fetch('/run-all', { method: 'POST' });
         const result = await res.json();
+        hideRunningOverlay();
         if (res.ok && result.success) {
-            await showAlert("Force Run Complete", `Force Run complete!\n${result.message}`);
+            await showAlert("All Pushed to GitHub", result.message, false, true);
         } else {
             await showAlert("Force Run Warnings", `Force Run finished with issues:\n${result.message}`, true);
         }
     } catch (err) {
+        hideRunningOverlay();
         console.error("Force Run API failure:", err);
         await showAlert("Force Run Error", "An unexpected error occurred during Force Run.", true);
     } finally {
-        btnForceRun.innerHTML = originalHtml;
         btnForceRun.disabled = false;
         await fetchInitialData();
     }
@@ -878,8 +878,16 @@ function setSafeMessageWithNewlines(element, text) {
     });
 }
 
+// Loading overlay helpers
+function showRunningOverlay() {
+    document.getElementById('run-loading-overlay').style.display = 'flex';
+}
+function hideRunningOverlay() {
+    document.getElementById('run-loading-overlay').style.display = 'none';
+}
+
 // Promise-based Alert Helper
-function showAlert(title, message, isError = false) {
+function showAlert(title, message, isError = false, isSuccess = false) {
     return new Promise((resolve) => {
         const modal = document.getElementById('alert-modal');
         const modalTitle = document.getElementById('alert-modal-title');
@@ -889,10 +897,13 @@ function showAlert(title, message, isError = false) {
 
         modalTitle.textContent = title;
         setSafeMessageWithNewlines(modalMsg, message);
-        
+
         if (isError) {
             modalTitle.style.color = 'var(--color-failed)';
             okBtn.className = 'btn btn-failed-custom';
+        } else if (isSuccess) {
+            modalTitle.style.color = 'var(--color-success)';
+            okBtn.className = 'btn btn-success-custom';
         } else {
             modalTitle.style.color = 'var(--text-primary)';
             okBtn.className = 'btn btn-primary';
