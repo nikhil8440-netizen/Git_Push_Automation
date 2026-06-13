@@ -1,15 +1,23 @@
-.venv/
-**/__pycache__/
-*.pyc
-*.log
+# Node / Electron build artifacts
+node_modules/
+out/
+dist/
+*.tsbuildinfo
+
+# Editors
 .vscode/
 .idea/
-backend/.lock
+*.log
 
-# Personal / machine-specific runtime data — never push to GitHub
-backend/config.json
-backend/logs.json
-backend/*.corrupt
+# Personal / machine-specific data — never commit.
+# The app stores these in the OS userData directory; these patterns are a
+# safety net so a stray copy in the repo is never pushed.
+config.json
+logs.json
+*.corrupt
+.lock
+build/icon-preview-256.png
+
 shortcut/
 
 # Internal docs / agent files — not for the public GitHub repo
