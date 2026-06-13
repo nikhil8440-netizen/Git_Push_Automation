@@ -16,6 +16,9 @@
         <!-- Header -->
         <header class="app-header">
             <div class="logo-area">
+                <button id="btn-profile" class="profile-btn" title="Your Git profile — name, email & GitHub sign-in">
+                    <span class="profile-avatar" id="profile-avatar-initials">?</span>
+                </button>
                 <div class="logo-icon">
                     <svg viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="3"></circle><circle cx="12" cy="13" r="1"></circle></svg>
                 </div>
@@ -165,7 +168,7 @@
                         <div class="form-group">
                             <label for="p-path">Local Directory Path</label>
                             <input type="text" id="p-path" placeholder="e.g. C:/Projects/MyWeb" required>
-                            <small class="form-help">Absolute local path on your Windows machine. If it isn't a Git repository yet, it will be initialized and linked to the remote automatically &mdash; you never need to run git yourself.</small>
+                            <small class="form-help">Absolute local path on your machine. If it isn't a Git repository yet, it will be initialized and linked to the remote automatically &mdash; you never need to run git yourself.</small>
                         </div>
                         
                         <div class="form-group">
@@ -277,6 +280,18 @@
                     <div class="modal-info-row">
                         <div><strong>Project:</strong> <span id="modal-project">Project Name</span></div>
                         <div><strong>Timestamp:</strong> <span id="modal-timestamp">2026-06-07 12:30:00</span></div>
+                        <div><strong>Result:</strong> <span id="modal-status-badge" class="badge">—</span></div>
+                    </div>
+                    <div class="console-section">
+                        <h4>What happened</h4>
+                        <div id="modal-explain" class="explain-box">
+                            <p id="modal-explain-headline" class="explain-headline"></p>
+                            <ul id="modal-explain-list" class="explain-list"></ul>
+                        </div>
+                    </div>
+                    <div class="console-section">
+                        <h4>Raw git message</h4>
+                        <pre id="modal-message" class="console-box message">No message recorded.</pre>
                     </div>
                     <div class="console-section">
                         <h4>Standard Output (stdout)</h4>
@@ -309,6 +324,46 @@
                 <div class="modal-footer">
                     <button class="btn btn-secondary" id="btn-cancel-confirm">Cancel</button>
                     <button class="btn btn-primary" id="btn-accept-confirm">Confirm</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Modal: Git identity + GitHub sign-in at a glance -->
+        <div class="modal-overlay" id="profile-modal" style="display: none;">
+            <div class="modal-card modal-sm">
+                <div class="modal-header">
+                    <h3>Your Git Profile</h3>
+                    <button class="btn-close" id="btn-close-profile-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1.25rem;">
+                        This is the same name, email, and GitHub sign-in that Git asks for the first time you use it. Set it once here and every backup uses it automatically.
+                    </p>
+
+                    <div class="profile-card">
+                        <div class="profile-card-head">
+                            <h4>Git Identity</h4>
+                            <span class="badge" id="profile-identity-badge">—</span>
+                        </div>
+                        <div class="profile-row"><span class="profile-key">Name</span><span class="profile-val" id="profile-identity-name">Not set</span></div>
+                        <div class="profile-row"><span class="profile-key">Email</span><span class="profile-val" id="profile-identity-email">Not set</span></div>
+                        <p class="profile-hint">Labels who made each commit. Saved globally on this machine — not a GitHub login.</p>
+                        <button class="btn btn-secondary btn-block" id="btn-profile-edit-identity">Set / Edit Identity</button>
+                    </div>
+
+                    <div class="profile-card">
+                        <div class="profile-card-head">
+                            <h4>GitHub Sign-in</h4>
+                            <span class="badge" id="profile-auth-badge">—</span>
+                        </div>
+                        <div class="profile-row"><span class="profile-key">Credentials</span><span class="profile-val" id="profile-auth-state">Checking…</span></div>
+                        <div class="profile-row"><span class="profile-key">Helper</span><span class="profile-val" id="profile-auth-helper">—</span></div>
+                        <p class="profile-hint">The token/login Git uses to push to GitHub without prompting. Stored securely by Git's credential helper.</p>
+                        <button class="btn btn-secondary btn-block" id="btn-profile-edit-auth">Set / Update GitHub Credentials</button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" id="btn-profile-close-footer">Done</button>
                 </div>
             </div>
         </div>
@@ -391,6 +446,96 @@
                 <div class="modal-footer">
                     <button class="btn btn-secondary" id="btn-skip-auth">Skip for now</button>
                     <button class="btn btn-primary" id="btn-save-auth">Save Credentials</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- Repository Control Panel (full visual git) -->
+        <!-- ============================================================ -->
+        <div id="git-panel" style="display: none;">
+            <div class="gp-shell">
+                <header class="gp-header">
+                    <div class="gp-title-area">
+                        <button class="gp-back" id="gp-close" title="Close control panel">&#8592;</button>
+                        <div>
+                            <h2 id="gp-repo-name">Repository</h2>
+                            <div class="gp-subline">
+                                <span class="gp-branch-chip" id="gp-branch-chip">
+                                    <span class="gp-branch-ico">&#9095;</span>
+                                    <span id="gp-branch-name">main</span>
+                                </span>
+                                <span class="gp-syncinfo" id="gp-syncinfo"></span>
+                                <span class="gp-path" id="gp-repo-path"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="gp-quick-actions">
+                        <button class="btn btn-secondary gp-quick" data-quick="fetch">&#8635; Fetch</button>
+                        <button class="btn btn-secondary gp-quick" data-quick="pull">&#8595; Pull</button>
+                        <button class="btn btn-primary gp-quick" data-quick="push">&#8593; Push</button>
+                        <button class="btn gp-quick gp-quick-danger" data-quick="forcepush">&#9888; Force Push</button>
+                        <button class="gp-refresh" id="gp-refresh" title="Refresh">&#10227;</button>
+                    </div>
+                </header>
+
+                <nav class="gp-tabs" id="gp-tabs">
+                    <button class="gp-tab active" data-tab="changes">Changes</button>
+                    <button class="gp-tab" data-tab="history">History</button>
+                    <button class="gp-tab" data-tab="branches">Branches</button>
+                    <button class="gp-tab" data-tab="remotes">Remotes</button>
+                    <button class="gp-tab" data-tab="stash">Stash</button>
+                    <button class="gp-tab" data-tab="terminal">Terminal</button>
+                </nav>
+
+                <div class="gp-body">
+                    <div class="gp-tabpane active" id="gp-pane-changes"></div>
+                    <div class="gp-tabpane" id="gp-pane-history"></div>
+                    <div class="gp-tabpane" id="gp-pane-branches"></div>
+                    <div class="gp-tabpane" id="gp-pane-remotes"></div>
+                    <div class="gp-tabpane" id="gp-pane-stash"></div>
+                    <div class="gp-tabpane" id="gp-pane-terminal"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- Centered DANGER confirmation overlay (destructive ops) -->
+        <!-- ============================================================ -->
+        <div id="danger-overlay" style="display: none;">
+            <div class="danger-card">
+                <div class="danger-icon">&#9888;</div>
+                <h2 class="danger-title" id="danger-title">Are you sure?</h2>
+                <p class="danger-message" id="danger-message"></p>
+                <div class="danger-consequence" id="danger-consequence"></div>
+                <div class="danger-actions">
+                    <button class="btn btn-secondary" id="danger-cancel">Cancel</button>
+                    <button class="btn danger-confirm-btn" id="danger-confirm">Confirm</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generic single-input prompt modal (branch names, urls, messages...) -->
+        <div class="modal-overlay" id="input-modal" style="display: none;">
+            <div class="modal-card modal-sm">
+                <div class="modal-header">
+                    <h3 id="input-modal-title">Enter Value</h3>
+                    <button class="btn-close" id="input-modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p id="input-modal-desc" style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.75rem;"></p>
+                    <div class="form-group">
+                        <label id="input-modal-label" for="input-modal-field">Value</label>
+                        <input type="text" id="input-modal-field" style="width:100%; margin-top:0.25rem;">
+                    </div>
+                    <div class="form-group" id="input-modal-field2-group" style="display:none;">
+                        <label id="input-modal-label2" for="input-modal-field2">Value 2</label>
+                        <input type="text" id="input-modal-field2" style="width:100%; margin-top:0.25rem;">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="input-modal-cancel">Cancel</button>
+                    <button class="btn btn-primary" id="input-modal-ok">OK</button>
                 </div>
             </div>
         </div>

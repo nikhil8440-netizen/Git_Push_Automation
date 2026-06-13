@@ -9,6 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backend import config_manager
 from backend import logger
 from backend import git_runner
+from backend import git_console
 
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
 
@@ -212,6 +213,54 @@ def set_git_identity_api():
     if success:
         return jsonify({"success": True, "message": message})
     return jsonify({"success": False, "error": message}), 500
+
+# ---------------------------------------------------------------------------
+# Visual Git Control Panel API
+#
+# Read-only data for the panel tabs comes from /git/<id>/data/<kind>.
+# Every mutating operation goes through a single dispatch: /git/<id>/action.
+# All git logic lives in git_console.py — these routes are thin wrappers.
+# ---------------------------------------------------------------------------
+
+@app.route('/git/<project_id>/data/<kind>', methods=['GET'])
+def git_data_api(project_id, kind):
+    """Return read-only repository data (overview, log, branches, remotes,
+    stashes, tags, diff, config) for the control panel."""
+    params = request.args.to_dict()
+    result = git_console.query(project_id, kind, params)
+    status = 200 if result.get("ok", True) else 400
+    return jsonify(result), status
+
+
+@app.route('/git/<project_id>/action', methods=['POST'])
+def git_action_api(project_id):
+    """Perform a mutating git operation for the control panel.
+
+    Body: {"op": "<operation>", "params": {...}}. Destructive operations are
+    gated in the UI (centered confirm overlay); the backend just executes and
+    logs them. Uses the same execution lock as backups for write operations so
+    a manual action can't collide with a running backup.
+    """
+    data = request.get_json(silent=True) or {}
+    op = data.get("op")
+    params = data.get("params") or {}
+    if not op:
+        return jsonify({"success": False, "message": "No operation specified."}), 400
+
+    # Read-only ops (terminal that only reads, etc.) still go through the lock
+    # for simplicity — operations are fast. If a backup is mid-flight, fail
+    # cleanly rather than risk racing on the git index.
+    if not git_runner.acquire_lock():
+        return jsonify({
+            "success": False,
+            "message": "A backup is currently running. Please try again in a moment."
+        }), 409
+    try:
+        result = git_console.perform(project_id, op, params)
+        return jsonify(result)
+    finally:
+        git_runner.release_lock()
+
 
 @app.route('/system-status', methods=['GET'])
 def system_status_api():
