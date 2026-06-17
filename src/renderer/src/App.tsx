@@ -4,7 +4,7 @@ import { Header } from './components/Header'
 import { Home } from './components/Home'
 import { ProjectDetail } from './components/ProjectDetail'
 import { ProjectForm } from './components/ProjectForm'
-import { BackupModal } from './components/BackupModal'
+import { BackupModal, GitInitModal } from './components/BackupModal'
 import { LogConsoleModal } from './components/ActivityLog'
 import { ProfileModal, IdentityModal, AuthModal } from './components/ProfileModals'
 import { SettingsModal } from './components/SettingsModal'
@@ -23,6 +23,7 @@ export default function App(): React.JSX.Element {
   const [formOpen, setFormOpen] = useState(false)
   const [formInitial, setFormInitial] = useState<Project | null>(null)
   const [backupTarget, setBackupTarget] = useState<Project | null>(null)
+  const [gitInitTarget, setGitInitTarget] = useState<Project | null>(null)
   const [logEntry, setLogEntry] = useState<LogEntry | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
   const [identityOpen, setIdentityOpen] = useState(false)
@@ -61,8 +62,26 @@ export default function App(): React.JSX.Element {
     if (view === 'detail' && !selected) setView('home')
   }, [view, selected])
 
+  async function handleCommit(project: Project): Promise<void> {
+    const needs = await window.api.backup.needsInit(project.id)
+    if (needs) {
+      setGitInitTarget(project)
+    } else {
+      setBackupTarget(project)
+    }
+  }
+
   async function runBackup(project: Project, message: string): Promise<void> {
     setBackupTarget(null)
+    setRunning(true)
+    const r = await window.api.backup.run(project.id, message)
+    setRunning(false)
+    toast(`${project.name}: ${r.message}`, r.status === 'SUCCESS' ? 'success' : r.status === 'FAILED' ? 'error' : 'info')
+    reloadProjects()
+  }
+
+  async function runBackupWithInit(project: Project, message: string): Promise<void> {
+    setGitInitTarget(null)
     setRunning(true)
     const r = await window.api.backup.run(project.id, message)
     setRunning(false)
@@ -111,7 +130,7 @@ export default function App(): React.JSX.Element {
               setSelectedId(id)
               setView('detail')
             }}
-            onCommit={(p) => setBackupTarget(p)}
+            onCommit={(p) => { void handleCommit(p) }}
             onToggleEnabled={toggleEnabled}
             onAdd={() => {
               setFormInitial(null)
@@ -124,7 +143,7 @@ export default function App(): React.JSX.Element {
           <ProjectDetail
             project={selected}
             onBack={() => setView('home')}
-            onCommit={() => setBackupTarget(selected)}
+            onCommit={() => { void handleCommit(selected) }}
             onEdit={() => {
               setFormInitial(selected)
               setFormOpen(true)
@@ -141,6 +160,12 @@ export default function App(): React.JSX.Element {
         projectName={backupTarget?.name ?? ''}
         onClose={() => setBackupTarget(null)}
         onConfirm={(msg) => backupTarget && runBackup(backupTarget, msg)}
+      />
+      <GitInitModal
+        open={!!gitInitTarget}
+        project={gitInitTarget}
+        onClose={() => setGitInitTarget(null)}
+        onConfirm={(msg) => gitInitTarget && runBackupWithInit(gitInitTarget, msg)}
       />
       <LogConsoleModal entry={logEntry} onClose={() => setLogEntry(null)} />
       <ProfileModal

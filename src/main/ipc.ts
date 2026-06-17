@@ -18,7 +18,8 @@ import {
   getGitIdentity,
   setGitIdentity,
   getGitAuthStatus,
-  storeGithubPat
+  storeGithubPat,
+  projectNeedsInit
 } from './git/engine'
 import { query, perform, getRepoStats } from './git/console'
 import { getSystemStatus } from './system'
@@ -47,6 +48,7 @@ export function registerIpc(): void {
     }
   })
   ipcMain.handle('backup:runAll', () => runAllEnabled(true))
+  ipcMain.handle('backup:needsInit', (_e, id: string) => projectNeedsInit(id))
 
   // Identity & auth
   ipcMain.handle('identity:get', () => getGitIdentity())

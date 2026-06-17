@@ -209,6 +209,13 @@ export async function ensureGitRepo(
   return { ok: true, message: 'Repository ready.' }
 }
 
+/** True when the project folder exists but has never been `git init`-ed. */
+export function projectNeedsInit(projectId: string): boolean {
+  const project = getProject(projectId)
+  if (!project) return false
+  return isDir(project.path) && !hasGitDir(project.path)
+}
+
 // ── Backup sequence ───────────────────────────────────────────────────────────
 
 const GB = 1024 * 1024 * 1024
@@ -342,28 +349,54 @@ export async function runBackup(
       await runGit(['rm', '--cached', '--quiet', '--', ...trackedIgnored.slice(i, i + 100)], { cwd: path })
     }
 
-    // 9b. Drop ignored paths from the staging list
-    let filesToAdd = changedFiles
-    const ignoredNow = new Set<string>()
-    for (let i = 0; i < changedFiles.length; i += 100) {
-      const batch = changedFiles.slice(i, i + 100)
-      const ci = await runGit(['check-ignore', ...batch], { cwd: path })
-      ci.stdout.split(/\r?\n/).map((f) => f.trim()).filter(Boolean).forEach((f) => ignoredNow.add(f))
-    }
-    if (ignoredNow.size > 0) filesToAdd = changedFiles.filter((f) => !ignoredNow.has(f))
-
-    // 9c. Stage remaining changes
-    for (let i = 0; i < filesToAdd.length; i += 100) {
-      const add = await runGit(['add', '--', ...filesToAdd.slice(i, i + 100)], { cwd: path })
-      if (!add.ok) {
-        return fail(projectId, name, `Git add failed. Stderr: ${add.stderr.trim()}`, add.stdout, add.stderr)
+    // 9b. Auto-ignore nested git repos — they can't be staged as regular files.
+    //     Writing them to .gitignore stops them appearing as untracked on every run.
+    const nestedRepos = changedFiles
+      .map((f) => f.replace(/\/$/, ''))
+      .filter((f) => !f.includes('/') && hasGitDir(join(path, f)))
+    if (nestedRepos.length > 0) {
+      const { appendFileSync, readFileSync } = await import('fs')
+      const gitignorePath = join(path, '.gitignore')
+      let existing = ''
+      try { existing = readFileSync(gitignorePath, 'utf8') } catch { /* file may not exist */ }
+      const toAdd = nestedRepos.filter((r) => !existing.split(/\r?\n/).includes(r))
+      if (toAdd.length > 0) {
+        const lines = (existing.endsWith('\n') || existing === '' ? '' : '\n') + toAdd.join('\n') + '\n'
+        appendFileSync(gitignorePath, lines, 'utf8')
+        logEvent(name, 'SUCCESS', `Auto-added nested git ${toAdd.length === 1 ? 'repo' : 'repos'} to .gitignore: ${toAdd.join(', ')}`)
       }
     }
 
-    // 9d. Nothing staged → no-op
+    // 9c. Stage everything. `git add -A` respects .gitignore and silently skips
+    //     nested git repositories added above.
+    const addAll = await runGit(['add', '-A'], { cwd: path })
+    if (!addAll.ok) {
+      return fail(projectId, name, `Git add failed: ${addAll.stderr.trim()}`, addAll.stdout, addAll.stderr)
+    }
+
+    // 9c-2. Unstage excluded_paths that git add -A may have staged.
+    if (excluded.length > 0) {
+      const hasHead = (await runGit(['rev-parse', '--verify', 'HEAD'], { cwd: path })).ok
+      for (let i = 0; i < excluded.length; i += 100) {
+        const batch = excluded.slice(i, i + 100)
+        // Fresh repo has no HEAD yet — rm from index. Existing repo — reset HEAD.
+        if (hasHead) {
+          await runGit(['reset', 'HEAD', '--', ...batch], { cwd: path })
+        } else {
+          await runGit(['rm', '--cached', '-r', '--force', '--', ...batch], { cwd: path })
+        }
+      }
+    }
+
+    // 9d. Nothing staged → no-op (code 0 = no diff, code 1 = diff exists)
     const staged = await runGit(['diff', '--cached', '--quiet'], { cwd: path })
     if (staged.code === 0) {
-      const msg = 'No changes to back up after applying ignore rules.'
+      const msg =
+        changedCount > 0
+          ? `${changedCount} file(s) detected but none could be staged. ` +
+            `Nested git repositories (folders with their own .git) are skipped — ` +
+            `add them to Excluded Paths if you want to suppress this.`
+          : 'No changes detected.'
       logEvent(name, 'NO_CHANGES', msg)
       updateProject(projectId, { last_status: 'NO_CHANGES', last_run: now() })
       return { status: 'NO_CHANGES', message: msg }

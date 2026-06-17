@@ -69,6 +69,7 @@ export interface GitManagerAPI {
   backup: {
     run(id: string, commitMessage?: string): Promise<BackupOutcome>
     runAll(): Promise<RunAllItem[]>
+    needsInit(id: string): Promise<boolean>
   }
   identity: {
     get(): Promise<IdentityInfo>
