@@ -67,7 +67,7 @@ export interface GitManagerAPI {
     testConnection(id: string): Promise<ServiceResult>
   }
   backup: {
-    run(id: string, commitMessage?: string): Promise<BackupOutcome>
+    run(id: string, commitMessage?: string, push?: boolean): Promise<BackupOutcome>
     runAll(): Promise<RunAllItem[]>
     needsInit(id: string): Promise<boolean>
   }

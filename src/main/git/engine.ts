@@ -190,6 +190,23 @@ export async function ensureGitRepo(
       await runGit(['symbolic-ref', 'HEAD', `refs/heads/${branch}`], { cwd: path })
     }
     logEvent(name, 'SUCCESS', `Initialized new Git repository on branch '${branch}'.`)
+  } else {
+    // Folder already had `git init` run on it (by the user, or a prior partial
+    // setup) before being added here. A plain `git init` names the branch
+    // whatever git's own default is (often 'master'), not the branch configured
+    // in this project — which later made push fail with "src refspec <branch>
+    // does not match any" because no local branch by that name existed.
+    // Safe to realign only while the branch is unborn (zero commits): renaming
+    // a branch that already has history could clobber a differently-named
+    // branch the user is intentionally using.
+    const hasCommit = await runGit(['rev-parse', '--verify', 'HEAD'], { cwd: path })
+    if (!hasCommit.ok) {
+      const current = await runGit(['symbolic-ref', '--short', '-q', 'HEAD'], { cwd: path })
+      if (current.ok && current.stdout.trim() && current.stdout.trim() !== branch) {
+        await runGit(['symbolic-ref', 'HEAD', `refs/heads/${branch}`], { cwd: path })
+        logEvent(name, 'SUCCESS', `Aligned empty existing repository to branch '${branch}'.`)
+      }
+    }
   }
 
   await ensureIdentity(path)
@@ -234,15 +251,16 @@ function fail(projectId: string, name: string, msg: string, out = '', err = ''):
 export async function runBackup(
   projectId: string,
   isManual = false,
-  commitMessage?: string
+  commitMessage?: string,
+  push = true
 ): Promise<BackupOutcome> {
   const project = getProject(projectId)
   if (!project) return { status: 'FAILED', message: 'Project not found' }
 
   const { name, path, origin } = project
-  const branch = project.branch || 'main'
+  const configuredBranch = project.branch || 'main'
   const autoCommit = project.auto_commit
-  const autoPush = project.auto_push
+  const autoPush = push && project.auto_push
   const excluded = project.excluded_paths ?? []
 
   // 1. Path exists
@@ -252,8 +270,16 @@ export async function runBackup(
   if (!(await checkGitInstalled())) return fail(projectId, name, 'Git is not installed or not in PATH.')
 
   // 3. Ensure repo ready (auto-init + remote)
-  const repo = await ensureGitRepo(path, branch, origin, name)
+  const repo = await ensureGitRepo(path, configuredBranch, origin, name)
   if (!repo.ok) return fail(projectId, name, repo.message)
+
+  // A pre-existing repo (added to Git Manager after the user already ran
+  // `git init` themselves) may already have commits on a branch that doesn't
+  // match `configuredBranch` — ensureGitRepo only realigns unborn branches.
+  // Operate on whatever branch is actually checked out so commit/push target
+  // a real ref instead of a `configuredBranch` name that may not exist locally.
+  const currentBranch = await runGit(['symbolic-ref', '--short', '-q', 'HEAD'], { cwd: path })
+  const branch = currentBranch.ok && currentBranch.stdout.trim() ? currentBranch.stdout.trim() : configuredBranch
 
   // 4. Size warning (non-fatal)
   const sizeBytes = await getRepoSizeBytes(path)

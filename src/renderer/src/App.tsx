@@ -4,7 +4,7 @@ import { Header } from './components/Header'
 import { Home } from './components/Home'
 import { ProjectDetail } from './components/ProjectDetail'
 import { ProjectForm } from './components/ProjectForm'
-import { BackupModal, GitInitModal } from './components/BackupModal'
+import { BackupModal, GitInitModal, PushModal } from './components/BackupModal'
 import { LogConsoleModal } from './components/ActivityLog'
 import { ProfileModal, IdentityModal, AuthModal } from './components/ProfileModals'
 import { SettingsModal } from './components/SettingsModal'
@@ -24,6 +24,7 @@ export default function App(): React.JSX.Element {
   const [formInitial, setFormInitial] = useState<Project | null>(null)
   const [backupTarget, setBackupTarget] = useState<Project | null>(null)
   const [gitInitTarget, setGitInitTarget] = useState<Project | null>(null)
+  const [pushTarget, setPushTarget] = useState<Project | null>(null)
   const [logEntry, setLogEntry] = useState<LogEntry | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
   const [identityOpen, setIdentityOpen] = useState(false)
@@ -31,6 +32,7 @@ export default function App(): React.JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [danger, setDanger] = useState<DangerRequest | null>(null)
   const [running, setRunning] = useState(false)
+  const [runningLabel, setRunningLabel] = useState('Committing your changes.')
 
   const reloadProjects = useCallback(async () => {
     const [p, l] = await Promise.all([window.api.projects.list(), window.api.logs.list()])
@@ -73,8 +75,9 @@ export default function App(): React.JSX.Element {
 
   async function runBackup(project: Project, message: string): Promise<void> {
     setBackupTarget(null)
+    setRunningLabel('Committing your changes.')
     setRunning(true)
-    const r = await window.api.backup.run(project.id, message)
+    const r = await window.api.backup.run(project.id, message, false)
     setRunning(false)
     toast(`${project.name}: ${r.message}`, r.status === 'SUCCESS' ? 'success' : r.status === 'FAILED' ? 'error' : 'info')
     reloadProjects()
@@ -82,14 +85,26 @@ export default function App(): React.JSX.Element {
 
   async function runBackupWithInit(project: Project, message: string): Promise<void> {
     setGitInitTarget(null)
+    setRunningLabel('Initializing repository and committing.')
     setRunning(true)
-    const r = await window.api.backup.run(project.id, message)
+    const r = await window.api.backup.run(project.id, message, false)
     setRunning(false)
     toast(`${project.name}: ${r.message}`, r.status === 'SUCCESS' ? 'success' : r.status === 'FAILED' ? 'error' : 'info')
     reloadProjects()
   }
 
+  async function handlePush(project: Project): Promise<void> {
+    setPushTarget(null)
+    setRunningLabel('Pushing to GitHub.')
+    setRunning(true)
+    const r = await window.api.git.action(project.id, 'push', {})
+    setRunning(false)
+    toast(`${project.name}: ${r.message}`, r.success ? 'success' : 'error')
+    reloadProjects()
+  }
+
   async function runAll(): Promise<void> {
+    setRunningLabel('Committing and pushing to GitHub.')
     setRunning(true)
     const results = await window.api.backup.runAll()
     setRunning(false)
@@ -131,6 +146,7 @@ export default function App(): React.JSX.Element {
               setView('detail')
             }}
             onCommit={(p) => { void handleCommit(p) }}
+            onPush={(p) => setPushTarget(p)}
             onToggleEnabled={toggleEnabled}
             onAdd={() => {
               setFormInitial(null)
@@ -167,6 +183,13 @@ export default function App(): React.JSX.Element {
         onClose={() => setGitInitTarget(null)}
         onConfirm={(msg) => gitInitTarget && runBackupWithInit(gitInitTarget, msg)}
       />
+      <PushModal
+        open={!!pushTarget}
+        projectName={pushTarget?.name ?? ''}
+        branch={pushTarget?.branch ?? 'main'}
+        onClose={() => setPushTarget(null)}
+        onConfirm={() => pushTarget && handlePush(pushTarget)}
+      />
       <LogConsoleModal entry={logEntry} onClose={() => setLogEntry(null)} />
       <ProfileModal
         open={profileOpen}
@@ -189,8 +212,8 @@ export default function App(): React.JSX.Element {
         <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="rounded-2xl border border-slate-700 bg-slate-900 px-10 py-8 text-center">
             <Spinner className="mx-auto h-8 w-8" />
-            <p className="mt-4 font-medium text-slate-100">Backing up…</p>
-            <p className="mt-1 text-sm text-slate-400">Committing and pushing to GitHub.</p>
+            <p className="mt-4 font-medium text-slate-100">Working…</p>
+            <p className="mt-1 text-sm text-slate-400">{runningLabel}</p>
           </div>
         </div>
       )}

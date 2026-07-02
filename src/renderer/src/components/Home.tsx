@@ -17,11 +17,13 @@ function ProjectCard({
   project,
   onOpen,
   onCommit,
+  onPush,
   onToggleEnabled
 }: {
   project: Project
   onOpen: () => void
   onCommit: () => void
+  onPush: () => void
   onToggleEnabled: (v: boolean) => void
 }): React.JSX.Element {
   return (
@@ -49,9 +51,14 @@ function ProjectCard({
 
       <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-3" onClick={(e) => e.stopPropagation()}>
         <Toggle checked={project.enabled} onChange={onToggleEnabled} label="Enabled" />
-        <Button variant="primary" onClick={onCommit} className="px-3 py-1.5 text-xs">
-          ⬆ Commit
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={onPush} className="px-3 py-1.5 text-xs">
+            ↑ Push
+          </Button>
+          <Button variant="primary" onClick={onCommit} className="px-3 py-1.5 text-xs">
+            ⬆ Commit
+          </Button>
+        </div>
       </div>
     </div>
   )
@@ -62,6 +69,7 @@ export function Home({
   logs,
   onOpenProject,
   onCommit,
+  onPush,
   onToggleEnabled,
   onAdd,
   onRunAll,
@@ -71,6 +79,7 @@ export function Home({
   logs: LogEntry[]
   onOpenProject: (id: string) => void
   onCommit: (p: Project) => void
+  onPush: (p: Project) => void
   onToggleEnabled: (p: Project, v: boolean) => void
   onAdd: () => void
   onRunAll: () => void
@@ -126,6 +135,7 @@ export function Home({
                 project={p}
                 onOpen={() => onOpenProject(p.id)}
                 onCommit={() => onCommit(p)}
+                onPush={() => onPush(p)}
                 onToggleEnabled={(v) => onToggleEnabled(p, v)}
               />
             ))}

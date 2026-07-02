@@ -1,7 +1,7 @@
 {
   "name": "git-manager",
   "productName": "Git Manager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Local-first desktop app that automatically backs up local folders to GitHub. The owner never touches git by hand.",
   "main": "./out/main/index.js",
   "author": "Git Manager",

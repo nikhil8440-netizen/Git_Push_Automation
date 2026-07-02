@@ -29,7 +29,7 @@ export function GitInitModal({
             Cancel
           </Button>
           <Button variant="primary" onClick={() => onConfirm(msg)}>
-            Initialize &amp; Back Up
+            Initialize &amp; Commit
           </Button>
         </>
       }
@@ -40,7 +40,7 @@ export function GitInitModal({
       </div>
       <p className="mb-4 text-sm text-slate-300">
         This folder has no <code className="rounded bg-slate-800 px-1 text-slate-200">.git</code> directory.
-        Initialize it as a git repository and run a backup now?
+        Initialize it as a git repository and commit now? Push separately when you&apos;re ready.
       </p>
       <Field label="Commit Message (optional)" hint='Leave blank to use: Auto Backup - <date time>'>
         <input
@@ -75,7 +75,7 @@ export function BackupModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Run Repository Backup"
+      title="Commit Changes"
       size="sm"
       footer={
         <>
@@ -83,18 +83,58 @@ export function BackupModal({
             Cancel
           </Button>
           <Button variant="primary" onClick={() => onConfirm(msg)}>
-            Commit &amp; Push
+            Commit
           </Button>
         </>
       }
     >
       <div className="mb-3 border-l-2 border-indigo-500 pl-3">
         <p className="font-medium text-slate-100">{projectName}</p>
-        <p className="text-sm text-slate-400">Your local files will be committed and pushed to GitHub.</p>
+        <p className="text-sm text-slate-400">Your local files will be committed. Push separately when you&apos;re ready.</p>
       </div>
       <Field label="Commit Message (optional)" hint="Leave blank to use: Auto Backup - <date time>">
         <input className={inputClass} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Added login styles" autoFocus />
       </Field>
+    </Modal>
+  )
+}
+
+export function PushModal({
+  open,
+  projectName,
+  branch,
+  onClose,
+  onConfirm
+}: {
+  open: boolean
+  projectName: string
+  branch: string
+  onClose: () => void
+  onConfirm: () => void
+}): React.JSX.Element {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Push to GitHub"
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={onConfirm}>
+            Push
+          </Button>
+        </>
+      }
+    >
+      <div className="mb-1 border-l-2 border-indigo-500 pl-3">
+        <p className="font-medium text-slate-100">{projectName}</p>
+        <p className="text-sm text-slate-400">
+          Push committed changes on <span className="text-slate-300">{branch}</span> to the remote repository.
+        </p>
+      </div>
     </Modal>
   )
 }

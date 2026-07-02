@@ -15,7 +15,8 @@ const api: GitManagerAPI = {
     testConnection: (id: string) => ipcRenderer.invoke('project:testConnection', id)
   },
   backup: {
-    run: (id: string, commitMessage?: string) => ipcRenderer.invoke('backup:run', id, commitMessage),
+    run: (id: string, commitMessage?: string, push?: boolean) =>
+      ipcRenderer.invoke('backup:run', id, commitMessage, push),
     runAll: () => ipcRenderer.invoke('backup:runAll'),
     needsInit: (id: string) => ipcRenderer.invoke('backup:needsInit', id)
   },

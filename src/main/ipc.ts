@@ -37,12 +37,12 @@ export function registerIpc(): void {
   ipcMain.handle('project:testConnection', (_e, id: string) => testProjectConnection(id))
 
   // Backups (lock-guarded)
-  ipcMain.handle('backup:run', async (_e, id: string, commitMessage?: string) => {
+  ipcMain.handle('backup:run', async (_e, id: string, commitMessage?: string, push = true) => {
     if (!acquireLock()) {
       return { status: 'ALREADY_RUNNING' as const, message: 'Another backup is currently running.' }
     }
     try {
-      return await runBackup(id, true, commitMessage)
+      return await runBackup(id, true, commitMessage, push)
     } finally {
       releaseLock()
     }

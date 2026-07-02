@@ -55,6 +55,20 @@ describe('ensureGitRepo', () => {
     const url = await runGit(['remote', 'get-url', 'origin'], { cwd: work })
     expect(url.stdout.trim()).toBe(originUrl)
   })
+
+  it('aligns an already-initialized empty repo to the configured branch', async () => {
+    // Simulate a folder the user already ran `git init` on themselves, before
+    // adding it to Git Manager. A plain `git init` defaults to git's built-in
+    // branch name (commonly 'master'), not whatever branch the user configures.
+    await runGit(['init', work])
+    const before = await runGit(['symbolic-ref', '--short', '-q', 'HEAD'], { cwd: work })
+    expect(before.stdout.trim()).not.toBe('main')
+
+    const res = await ensureGitRepo(work, 'main', originUrl, 'Test')
+    expect(res.ok).toBe(true)
+    const after = await runGit(['symbolic-ref', '--short', '-q', 'HEAD'], { cwd: work })
+    expect(after.stdout.trim()).toBe('main')
+  })
 })
 
 describe('runBackup', () => {
@@ -113,6 +127,35 @@ describe('runBackup', () => {
     expect(out.message).toMatch(/push disabled/)
     const ls = await runGit(['ls-remote', originUrl])
     expect(ls.stdout.trim()).toBe('') // nothing reached the remote
+  })
+
+  it('the Commit button (push=false) never pushes even when auto_push is on', async () => {
+    // Separate Commit vs Push buttons: clicking Commit must never push, even
+    // though the project's own auto_push setting is enabled.
+    writeFileSync(join(work, 'commit-only.txt'), 'x')
+    const p = makeProject({ auto_push: true })
+    const out = await runBackup(p.id, true, 'commit only via button', false)
+    expect(out.status).toBe('SUCCESS')
+    expect(out.message).toMatch(/push disabled/)
+    const ls = await runGit(['ls-remote', originUrl])
+    expect(ls.stdout.trim()).toBe('') // nothing reached the remote
+
+    const head = await runGit(['rev-parse', '--verify', 'HEAD'], { cwd: work })
+    expect(head.ok).toBe(true) // but the commit itself did happen
+  })
+
+  it('backs up a folder that already had `git init` run on it manually', async () => {
+    // Reproduces the reported bug: user runs `git init` themselves (defaults to
+    // git's built-in branch name), then adds the folder to Git Manager with
+    // branch 'main' configured. The push must not fail with
+    // "src refspec main does not match any".
+    await runGit(['init', work])
+    writeFileSync(join(work, 'e.txt'), 'x')
+    const p = makeProject()
+    const out = await runBackup(p.id, true, 'first commit on pre-existing repo')
+    expect(out.status).toBe('SUCCESS')
+    const ls = await runGit(['ls-remote', originUrl])
+    expect(ls.stdout).toMatch(/refs\/heads\/main/)
   })
 
   it('pushes a previously-committed-but-unpushed commit on a later run', async () => {
